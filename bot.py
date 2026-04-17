@@ -23,7 +23,7 @@ ADMIN_ID = 1431950109
 FORCE_JOIN_CHANNEL = "@ANONYMOUS_GROUP_KING" 
 force_join_active = False 
 user_selection = {}
-pending_searches = {} # Verification ke waqt search yaad rakhne ke liye
+pending_searches = {} # Memory for verification flow
 
 # Branding Setup
 MY_TG_LINK = "https://t.me/beast_harry"
@@ -85,10 +85,10 @@ def check_membership(user_id):
     except:
         return False
 
-# Integrated Search Execution Function
-def execute_search(chat_id, target_val, mode, reply_id):
+# Main Execution Function to avoid duplicate logic
+def execute_osint_logic(chat_id, target_val, mode, reply_to_id):
     status_msg = bot.send_message(chat_id, "🛰 **Accessing Secure Database...**\n*Pardhan Ji is fetching intel, please wait...*", 
-                                  parse_mode="Markdown", reply_to_message_id=reply_id)
+                                  parse_mode="Markdown", reply_to_message_id=reply_to_id)
     
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -156,31 +156,31 @@ def handle_input(message):
 
     # --- [FORCE JOIN & VERIFY LOGIC] ---
     if force_join_active and not check_membership(message.from_user.id):
-        # Save pending search data
+        # Store data in pending searches
         pending_searches[message.from_user.id] = {'val': target_val, 'mode': mode, 'mid': message.message_id}
         
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("Join Channel 📢", url=f"https://t.me/{FORCE_JOIN_CHANNEL.replace('@', '')}"))
-        markup.add(types.InlineKeyboardButton("Verify & Continue ✅", callback_data="verify_user"))
+        markup.add(types.InlineKeyboardButton("Join Channel 📢", url=f"https://t.me/ANONYMOUS_GROUP_KING"))
+        markup.add(types.InlineKeyboardButton("Verify & Continue ✅", callback_data="verify_and_run"))
         
-        bot.reply_to(message, "⚠️ **Verification Required!**\n\nPlease join our channel first to use this search.", reply_markup=markup)
+        bot.reply_to(message, "⚠️ **Verification Required!**\n\nPlease join our channel first to access the search result.", reply_markup=markup)
         return
 
-    # If already a member, run search immediately
-    execute_search(message.chat.id, target_val, mode, message.message_id)
+    # If member, start search immediately
+    execute_osint_logic(message.chat.id, target_val, mode, message.message_id)
 
-@bot.callback_query_handler(func=lambda call: call.data == "verify_user")
+@bot.callback_query_handler(func=lambda call: call.data == "verify_and_run")
 def verify_callback(call):
     user_id = call.from_user.id
     if check_membership(user_id):
         if user_id in pending_searches:
             data = pending_searches.pop(user_id)
-            bot.edit_message_text("✅ **Verification Successful!**\nStarting search...", call.message.chat.id, call.message.message_id)
-            execute_search(call.message.chat.id, data['val'], data['mode'], data['mid'])
+            bot.edit_message_text("✅ **Verification Successful!**\nInitializing search...", call.message.chat.id, call.message.message_id)
+            execute_osint_logic(call.message.chat.id, data['val'], data['mode'], data['mid'])
         else:
-            bot.answer_callback_query(call.id, "✅ Verified! Ab naya search shuru karein.")
+            bot.answer_callback_query(call.id, "✅ Verified! Please start a new search.")
     else:
-        bot.answer_callback_query(call.id, "❌ Bhai, pehle join toh kar lo! Phir click karna. 💀", show_alert=True)
+        bot.answer_callback_query(call.id, "❌ Join the channel first, Pardhan ji! 💀", show_alert=True)
 
 # --- [RENDER SETUP] ---
 @app.route('/')
