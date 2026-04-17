@@ -27,7 +27,7 @@ MY_USERNAME = "@beast_harry"
 TARGET_BOT_UID = '@LootVerseInfo_Bot' 
 TARGET_BOT_NUM = '@LootVerseinfoBot'
 
-# --- [BEAST CLEANER - NO TOUCH] ---
+# --- [BEAST CLEANER - MODIFIED TO REMOVE TEXT BRANDING] ---
 def beast_cleaner(text):
     if not isinstance(text, str): return text
     tg_link_pattern = r'(https?://)?(t\.me|telegram\.me)/[a-zA-Z0-9_+/-]+'
@@ -38,8 +38,10 @@ def beast_cleaner(text):
         if found.lower() in [TARGET_BOT_UID.lower(), TARGET_BOT_NUM.lower()]: return found
         return MY_USERNAME
     text = re.sub(username_pattern, replace_un, text)
-    text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer)', 'Powered by Pardhan ji', text)
-    return text
+    
+    # Sirf text replace kar rahe hain, extra line add nahi kar rahe
+    text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer).*', '', text)
+    return text.strip()
 
 # --- [CORE ENGINE - NO TOUCH] ---
 async def fetch_intel(search_val, mode):
@@ -68,9 +70,9 @@ async def fetch_intel(search_val, mode):
         if client.is_connected(): await client.disconnect()
         return f"❌ System Error: {str(e)}"
 
-# --- [AUTO-DELETE TIMER - 1 MINUTE] ---
+# --- [AUTO-DELETE TIMER - UPDATED TO 60s] ---
 def disappear_timer(chat_id, message_id):
-    time.sleep(60) # 1 Minute wait
+    time.sleep(60) # 1 Minute delay
     try:
         bot.delete_message(chat_id, message_id)
     except:
@@ -97,7 +99,7 @@ def welcome(message):
         "• **UserID:** `123456789` \n"
         "• **Mobile:** `917282942060` \n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"Developer: {MY_USERNAME}"
+        f"Developer: @beast\_harry"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=markup)
 
@@ -127,7 +129,7 @@ def process_data_input(message):
     final_output = loop.run_until_complete(fetch_intel(target_val, mode))
     loop.close()
     
-    # --- [DESIGN UPDATE: CLEAN LOOK + BUTTON] ---
+    # --- [CLEAN DESIGN WITH INLINE BUTTON] ---
     final_design = (
         "🏁 **INTEL DECRYPTED SUCCESSFULLY**\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -135,15 +137,14 @@ def process_data_input(message):
         "━━━━━━━━━━━━━━━━━━━━━━━━"
     )
     
-    # Create Developer Button
+    # Inline button added here
     markup_inline = types.InlineKeyboardMarkup()
     markup_inline.add(types.InlineKeyboardButton(text="Developer ⚡", url=MY_TG_LINK))
     
-    # Edit message with design and button
     bot.edit_message_text(final_design, message.chat.id, status_msg.message_id, 
                           parse_mode="Markdown", reply_markup=markup_inline)
     
-    # Start 1-minute delete thread
+    # Start timer thread
     Thread(target=disappear_timer, args=(message.chat.id, status_msg.message_id)).start()
 
 # --- [RENDER SERVER SETUP] ---
@@ -155,6 +156,6 @@ def run_flask():
     app.run(host='0.0.0.0', port=port)
 
 if __name__ == "__main__":
-    print("Pardhan OSINT Final Starting...")
+    print("Pardhan OSINT Final Edition Starting...")
     Thread(target=run_flask).start()
     bot.infinity_polling()
