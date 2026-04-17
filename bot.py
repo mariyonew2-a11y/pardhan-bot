@@ -23,7 +23,7 @@ ADMIN_ID = 1431950109
 FORCE_JOIN_CHANNEL = "@ANONYMOUS_GROUP_KING" 
 force_join_active = False 
 user_selection = {}
-pending_data = {} # User ka input temporarily yaad rakhne ke liye
+pending_data = {} # Smart Memory for verification
 
 # Branding Setup
 MY_TG_LINK = "https://t.me/beast_harry"
@@ -67,7 +67,7 @@ async def fetch_intel(search_val, mode):
                     return "❌ Database mein koi record nahi mila, Boss!"
                 await asyncio.sleep(1)
             await client.disconnect()
-            return "❌ Response kaafi slow hai, thodi der baad try karein."
+            return "❌ Response slow hai, baad mein try karein."
     except Exception as e:
         if client.is_connected(): await client.disconnect()
         return f"❌ System Error: {str(e)}"
@@ -85,10 +85,10 @@ def check_membership(user_id):
     except:
         return False
 
-# Main Execution Wrapper (No Code Duplication)
-def execute_search_logic(chat_id, target_val, mode, reply_msg_id):
-    status_msg = bot.send_message(chat_id, "🛰 **Accessing Secure Database...**\n*Pardhan Ji is fetching intel, please wait...*", 
-                                  parse_mode="Markdown", reply_to_message_id=reply_msg_id)
+# Function to execute search (to avoid repeat code)
+def run_search(chat_id, target_val, mode, reply_to_id):
+    status_msg = bot.send_message(chat_id, "🛰 **Accessing Secure Database...**\n*Pardhan Ji is fetching intel...*", 
+                                  parse_mode="Markdown", reply_to_message_id=reply_to_id)
     
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -153,33 +153,33 @@ def handle_input(message):
     mode = user_selection.pop(message.chat.id)
     target_val = message.text
 
-    # --- [REAL-TIME VERIFICATION CHECK] ---
+    # --- [REAL-TIME FORCE JOIN CHECK] ---
     if force_join_active and not check_membership(message.from_user.id):
-        # Data ko save karo taaki verification ke baad use kar sakein
+        # Memory mein save karo verification ke baad use karne ke liye
         pending_data[message.from_user.id] = {'val': target_val, 'mode': mode, 'mid': message.message_id}
         
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("Join Channel 📢", url="https://t.me/ANONYMOUS_GROUP_KING"))
-        markup.add(types.InlineKeyboardButton("Verify & Continue ✅", callback_data="verify_me"))
+        markup.add(types.InlineKeyboardButton("Verify & Continue ✅", callback_data="verify_search"))
         
         bot.reply_to(message, "⚠️ **Verification Required!**\n\nPlease join our channel first to access the search result.", reply_markup=markup)
         return
 
-    # Agar member hai toh seedha search
-    execute_search_logic(message.chat.id, target_val, mode, message.message_id)
+    # Agar joined hai toh direct search
+    run_search(message.chat.id, target_val, mode, message.message_id)
 
-@bot.callback_query_handler(func=lambda call: call.data == "verify_me")
-def verify_btn_handler(call):
+@bot.callback_query_handler(func=lambda call: call.data == "verify_search")
+def verify_handler(call):
     user_id = call.from_user.id
     if check_membership(user_id):
         if user_id in pending_data:
-            info = pending_data.pop(user_id)
-            bot.edit_message_text("✅ **Success!** Starting search...", call.message.chat.id, call.message.message_id)
-            execute_search_logic(call.message.chat.id, info['val'], info['mode'], info['mid'])
+            data = pending_data.pop(user_id)
+            bot.edit_message_text("✅ **Verification Successful!**\nProcessing your request...", call.message.chat.id, call.message.message_id)
+            run_search(call.message.chat.id, data['val'], data['mode'], data['mid'])
         else:
             bot.answer_callback_query(call.id, "✅ Verified! Ab naya search shuru karein.")
     else:
-        bot.answer_callback_query(call.id, "❌ Pehle join toh karo, Pardhan ji! 💀", show_alert=True)
+        bot.answer_callback_query(call.id, "❌ Bhai, pehle join toh kar lo! 💀", show_alert=True)
 
 # --- [RENDER SETUP] ---
 @app.route('/')
