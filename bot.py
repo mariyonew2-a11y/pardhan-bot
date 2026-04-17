@@ -18,6 +18,7 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
+# State storage for users
 user_selection = {}
 
 # Branding Setup
@@ -67,9 +68,9 @@ async def fetch_intel(search_val, mode):
         if client.is_connected(): await client.disconnect()
         return f"❌ System Error: {str(e)}"
 
-# --- [AUTO-DELETE TIMER - UPDATED TO 1 MIN] ---
+# --- [AUTO-DELETE TIMER - 1 MINUTE] ---
 def disappear_timer(chat_id, message_id):
-    time.sleep(60) # Changed to 60 Seconds (1 Minute)
+    time.sleep(60) # 1 Minute wait
     try:
         bot.delete_message(chat_id, message_id)
     except:
@@ -94,7 +95,7 @@ def welcome(message):
         "simply send the ID or Mobile Number to the bot.\n\n"
         "💡 **EXAMPLES:**\n"
         "• **UserID:** `123456789` \n"
-        "• **Number:** `917282942060` \n"
+        "• **Mobile:** `917282942060` \n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"Developer: {MY_USERNAME}"
     )
@@ -126,7 +127,7 @@ def process_data_input(message):
     final_output = loop.run_until_complete(fetch_intel(target_val, mode))
     loop.close()
     
-    # --- [UPDATED DESIGN: TEXT REMOVED, BUTTON ADDED] ---
+    # --- [DESIGN UPDATE: CLEAN LOOK + BUTTON] ---
     final_design = (
         "🏁 **INTEL DECRYPTED SUCCESSFULLY**\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -134,20 +135,26 @@ def process_data_input(message):
         "━━━━━━━━━━━━━━━━━━━━━━━━"
     )
     
-    # Create Inline Button for Developer
+    # Create Developer Button
     markup_inline = types.InlineKeyboardMarkup()
     markup_inline.add(types.InlineKeyboardButton(text="Developer ⚡", url=MY_TG_LINK))
     
+    # Edit message with design and button
     bot.edit_message_text(final_design, message.chat.id, status_msg.message_id, 
                           parse_mode="Markdown", reply_markup=markup_inline)
     
-    # Thread for 1-minute delete
+    # Start 1-minute delete thread
     Thread(target=disappear_timer, args=(message.chat.id, status_msg.message_id)).start()
 
+# --- [RENDER SERVER SETUP] ---
 @app.route('/')
 def home(): return "SYSTEM_ACTIVE"
 
+def run_flask():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
 if __name__ == "__main__":
-    print("Pardhan OSINT Clean v5.0 Starting...")
-    Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))).start()
+    print("Pardhan OSINT Final Starting...")
+    Thread(target=run_flask).start()
     bot.infinity_polling()
