@@ -18,7 +18,6 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
-# State storage for users
 user_selection = {}
 
 # Branding Setup
@@ -68,19 +67,19 @@ async def fetch_intel(search_val, mode):
         if client.is_connected(): await client.disconnect()
         return f"❌ System Error: {str(e)}"
 
-# --- [AUTO-DELETE TIMER FUNCTION] ---
+# --- [AUTO-DELETE TIMER - UPDATED TO 1 MIN] ---
 def disappear_timer(chat_id, message_id):
-    time.sleep(20) # 20 Seconds Wait
+    time.sleep(60) # Changed to 60 Seconds (1 Minute)
     try:
         bot.delete_message(chat_id, message_id)
     except:
         pass
 
-# --- [STEP 1: UPGRADED START COMMAND] ---
+# --- [UI HANDLERS] ---
+
 @bot.message_handler(commands=['start'])
 def welcome(message):
     user_name = message.from_user.first_name
-    
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn1 = types.KeyboardButton("👤 USER ID Search")
     btn2 = types.KeyboardButton("📱 NUMBER Search")
@@ -94,12 +93,11 @@ def welcome(message):
         "Select your preferred search mode using the buttons below. Once prompted, "
         "simply send the ID or Mobile Number to the bot.\n\n"
         "💡 **EXAMPLES:**\n"
-        "• **UserID:** `123456789` (Numerical ID)\n"
-        "• **Number:** `917282942060` (With Country Code)\n"
+        "• **UserID:** `123456789` \n"
+        "• **Number:** `917282942060` \n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"Developer: @beast\_harry"
+        f"Developer: {MY_USERNAME}"
     )
-    
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text in ["👤 USER ID Search", "📱 NUMBER Search"])
@@ -128,30 +126,28 @@ def process_data_input(message):
     final_output = loop.run_until_complete(fetch_intel(target_val, mode))
     loop.close()
     
-    # --- [STEP 2: CLEANER DESIGN & DEVELOPER TAG] ---
+    # --- [UPDATED DESIGN: TEXT REMOVED, BUTTON ADDED] ---
     final_design = (
         "🏁 **INTEL DECRYPTED SUCCESSFULLY**\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"{final_output}\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"Developer: @beast\_harry ☢️"
+        "━━━━━━━━━━━━━━━━━━━━━━━━"
     )
     
-    bot.edit_message_text(final_design, message.chat.id, status_msg.message_id, parse_mode="Markdown")
+    # Create Inline Button for Developer
+    markup_inline = types.InlineKeyboardMarkup()
+    markup_inline.add(types.InlineKeyboardButton(text="Developer ⚡", url=MY_TG_LINK))
     
-    # --- [STEP 3: AUTO-DISAPPEAR (20 SECONDS)] ---
+    bot.edit_message_text(final_design, message.chat.id, status_msg.message_id, 
+                          parse_mode="Markdown", reply_markup=markup_inline)
+    
+    # Thread for 1-minute delete
     Thread(target=disappear_timer, args=(message.chat.id, status_msg.message_id)).start()
 
-# --- [RENDER SERVER SETUP] ---
 @app.route('/')
-def home(): 
-    return "SYSTEM_ACTIVE"
-
-def run_flask():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
+def home(): return "SYSTEM_ACTIVE"
 
 if __name__ == "__main__":
-    print("Beast OSINT Terminal Starting...")
-    Thread(target=run_flask).start()
+    print("Pardhan OSINT Clean v5.0 Starting...")
+    Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))).start()
     bot.infinity_polling()
