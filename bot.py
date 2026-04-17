@@ -18,12 +18,12 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
-# Admin & Channel Setup
+# Admin & State Config
 ADMIN_ID = 1431950109
 FORCE_JOIN_CHANNEL = "@ANONYMOUS_GROUP_KING" 
 force_join_active = False 
 user_selection = {}
-pending_data = {} # Smart Memory for verification
+pending_searches = {} # Verification ke waqt search yaad rakhne ke liye
 
 # Branding Setup
 MY_TG_LINK = "https://t.me/beast_harry"
@@ -67,7 +67,7 @@ async def fetch_intel(search_val, mode):
                     return "❌ Database mein koi record nahi mila, Boss!"
                 await asyncio.sleep(1)
             await client.disconnect()
-            return "❌ Response slow hai, baad mein try karein."
+            return "❌ Response kaafi slow hai, thodi der baad try karein."
     except Exception as e:
         if client.is_connected(): await client.disconnect()
         return f"❌ System Error: {str(e)}"
@@ -85,10 +85,10 @@ def check_membership(user_id):
     except:
         return False
 
-# Function to execute search (to avoid repeat code)
-def run_search(chat_id, target_val, mode, reply_to_id):
-    status_msg = bot.send_message(chat_id, "🛰 **Accessing Secure Database...**\n*Pardhan Ji is fetching intel...*", 
-                                  parse_mode="Markdown", reply_to_message_id=reply_to_id)
+# Integrated Search Execution Function
+def execute_search(chat_id, target_val, mode, reply_id):
+    status_msg = bot.send_message(chat_id, "🛰 **Accessing Secure Database...**\n*Pardhan Ji is fetching intel, please wait...*", 
+                                  parse_mode="Markdown", reply_to_message_id=reply_id)
     
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -116,6 +116,7 @@ def welcome(message):
         f"💀 **Welcome, {user_name}!** 💀\n\n"
         "⚡ **PARDHAN JI OSINT** ⚡\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "🛰 **USAGE GUIDE:**\n"
         "Select search mode. Send User ID or Mobile Number.\n\n"
         f"Developer: {MY_USERNAME}"
     )
@@ -153,33 +154,33 @@ def handle_input(message):
     mode = user_selection.pop(message.chat.id)
     target_val = message.text
 
-    # --- [REAL-TIME FORCE JOIN CHECK] ---
+    # --- [FORCE JOIN & VERIFY LOGIC] ---
     if force_join_active and not check_membership(message.from_user.id):
-        # Memory mein save karo verification ke baad use karne ke liye
-        pending_data[message.from_user.id] = {'val': target_val, 'mode': mode, 'mid': message.message_id}
+        # Save pending search data
+        pending_searches[message.from_user.id] = {'val': target_val, 'mode': mode, 'mid': message.message_id}
         
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("Join Channel 📢", url="https://t.me/ANONYMOUS_GROUP_KING"))
-        markup.add(types.InlineKeyboardButton("Verify & Continue ✅", callback_data="verify_search"))
+        markup.add(types.InlineKeyboardButton("Join Channel 📢", url=f"https://t.me/{FORCE_JOIN_CHANNEL.replace('@', '')}"))
+        markup.add(types.InlineKeyboardButton("Verify & Continue ✅", callback_data="verify_user"))
         
-        bot.reply_to(message, "⚠️ **Verification Required!**\n\nPlease join our channel first to access the search result.", reply_markup=markup)
+        bot.reply_to(message, "⚠️ **Verification Required!**\n\nPlease join our channel first to use this search.", reply_markup=markup)
         return
 
-    # Agar joined hai toh direct search
-    run_search(message.chat.id, target_val, mode, message.message_id)
+    # If already a member, run search immediately
+    execute_search(message.chat.id, target_val, mode, message.message_id)
 
-@bot.callback_query_handler(func=lambda call: call.data == "verify_search")
-def verify_handler(call):
+@bot.callback_query_handler(func=lambda call: call.data == "verify_user")
+def verify_callback(call):
     user_id = call.from_user.id
     if check_membership(user_id):
-        if user_id in pending_data:
-            data = pending_data.pop(user_id)
-            bot.edit_message_text("✅ **Verification Successful!**\nProcessing your request...", call.message.chat.id, call.message.message_id)
-            run_search(call.message.chat.id, data['val'], data['mode'], data['mid'])
+        if user_id in pending_searches:
+            data = pending_searches.pop(user_id)
+            bot.edit_message_text("✅ **Verification Successful!**\nStarting search...", call.message.chat.id, call.message.message_id)
+            execute_search(call.message.chat.id, data['val'], data['mode'], data['mid'])
         else:
             bot.answer_callback_query(call.id, "✅ Verified! Ab naya search shuru karein.")
     else:
-        bot.answer_callback_query(call.id, "❌ Bhai, pehle join toh kar lo! 💀", show_alert=True)
+        bot.answer_callback_query(call.id, "❌ Bhai, pehle join toh kar lo! Phir click karna. 💀", show_alert=True)
 
 # --- [RENDER SETUP] ---
 @app.route('/')
