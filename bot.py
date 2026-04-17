@@ -6,9 +6,9 @@ import re
 import os
 from flask import Flask
 from threading import Thread
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- [CONFIG] ---
+# Render ke Environment Variables se values uthayenge
 API_ID = 34871644 
 API_HASH = '9ab73b2a48115feed25b5029c812ea29'
 SESSION_STR = os.environ.get('TELETHON_SESSION') 
@@ -23,111 +23,114 @@ MY_USERNAME = "@beast_harry"
 TARGET_BOT_UID = '@LootVerseInfo_Bot' 
 TARGET_BOT_NUM = '@LootVerseinfoBot'
 
-# --- [BEAST CLEANER - YOUR ORIGINAL LOGIC] ---
+# --- [BEAST CLEANER LOGIC] ---
 def beast_cleaner(text):
     if not isinstance(text, str): return text
+    
+    # Sab external links aur usernames mita kar Harry ka branding chipkao
     tg_link_pattern = r'(https?://)?(t\.me|telegram\.me)/[a-zA-Z0-9_+/-]+'
     username_pattern = r'@[a-zA-Z0-9_]+'
+    
     text = re.sub(tg_link_pattern, MY_TG_LINK, text)
+    
     def replace_un(m):
         found = m.group(0)
-        if found.lower() in [TARGET_BOT_UID.lower(), TARGET_BOT_NUM.lower()]: return found
+        # Target bots ko ignore karo, baaki sab replace
+        if found.lower() in [TARGET_BOT_UID.lower(), TARGET_BOT_NUM.lower()]: 
+            return found
         return MY_USERNAME
+    
     text = re.sub(username_pattern, replace_un, text)
+    
+    # Credit swap logic
     text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer)', 'Powered by Pardhan ji', text)
     return text
 
-# --- [TELETHON ENGINE - YOUR EXACT FETCH LOGIC] ---
+# --- [TELETHON CORE ENGINE] ---
 async def fetch_intel(search_val, mode):
     client = TelegramClient(StringSession(SESSION_STR), API_ID, API_HASH)
     await client.connect()
+    
     target = TARGET_BOT_NUM if mode == 'num' else TARGET_BOT_UID
     
     try:
-        async with client.conversation(target, timeout=60) as conv:
+        async with client.conversation(target, timeout=45) as conv:
             await conv.send_message(str(search_val))
             
-            # Polling Logic: Wahi 12 attempts wala jo tere pass working tha
-            for _ in range(12): 
+            # Bot response ke liye wait loop
+            for _ in range(15): 
                 response = await conv.get_response()
                 raw_text = response.text
                 
+                # Processing skip karo
                 if "processing" in raw_text.lower():
                     continue
-
-                # SUCCESS INDICATORS (Your exact regex and keywords)
-                mobile_match = re.search(r'(?:mobile|phone|number|📱)\D*(\d{10,12})', raw_text, re.IGNORECASE)
                 
-                if "RESULT FETCHED" in raw_text.upper() or mobile_match or "{" in raw_text:
-                    clean_output = beast_cleaner(raw_text)
+                # --- [/num Fix & Success Logic] ---
+                # Check for keywords, JSON format, or substantial data length
+                success_indicators = ["RESULT FETCHED", "DETAILS FOR", "USER DATA", "METADATA", "{"]
+                
+                if any(x in raw_text.upper() for x in success_indicators) or len(raw_text) > 100:
+                    clean_res = beast_cleaner(raw_text)
                     await client.disconnect()
-                    return clean_output
-
-                # Failure Check
-                error_keywords = ["NO RECORD FOUND", "INVALID ID", "ERROR OCCURRED", "DETAILS NOT FOUND", "NOT AVAILABLE"]
-                if any(x in raw_text.upper() for x in error_keywords):
+                    return clean_res
+                
+                # Failure detection
+                if any(x in raw_text.upper() for x in ["NOT AVAILABLE", "NOT FOUND", "ERROR"]):
                     await client.disconnect()
-                    return "❌ **Record Not Found in Pardhan Database!**"
+                    return "❌ Database mein koi record nahi mila, Boss!"
 
-                await asyncio.sleep(2) 
+                await asyncio.sleep(1)
 
             await client.disconnect()
-            return "❌ **Timeout: Bot is responding very slow.**"
+            return "❌ Response kaafi slow hai, thodi der baad try karein."
             
     except Exception as e:
         if client.is_connected(): await client.disconnect()
-        return f"❌ **System Error:** `{str(e)}`"
+        return f"❌ System Error: {str(e)}"
 
-# --- [PROFESSIONAL COMMANDS SETUP] ---
+# --- [TELEGRAM BOT COMMANDS] ---
 @bot.message_handler(commands=['start'])
 def welcome(message):
-    user_name = message.from_user.first_name
     help_text = (
-        f"👋 **Welcome Boss, {user_name}!**\n\n"
-        "⚡ **PARDHAN OSINT TERMINAL v2.5** ⚡\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "Extract digital intel instantly. Copy commands by clicking on them:\n\n"
-        "🔹 `/uid` - ID to Number\n"
-        "🔹 `/num` - Number to Metadata\n\n"
-        "💡 **Examples:**\n"
-        "• `/uid 5412896320`\n"
-        "• `/num 917282942060`\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "**Owner:** @beast\_harry"
+        "⚡ **PARDHAN OSINT TERMINAL ACTIVE** ⚡\n\n"
+        "Bataiye Harry bhai, kya nikalna hai?\n\n"
+        "Commands:\n"
+        "🔹 `/uid [TelegramID]` - User ID se Number\n"
+        "🔹 `/num [MobileNo]` - Number se Full Details\n\n"
+        "Owner: @beast_harry"
     )
-    
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("Developer", url=MY_TG_LINK),
-               InlineKeyboardButton("Join Channel", url=MY_TG_LINK))
-    
-    bot.reply_to(message, help_text, parse_mode="Markdown", reply_markup=markup)
+    bot.reply_to(message, help_text, parse_mode="Markdown")
 
 @bot.message_handler(commands=['uid', 'num'])
 def handle_search(message):
     cmd_parts = message.text.split()
     if len(cmd_parts) < 2:
-        bot.reply_to(message, "⚠️ **Please provide an ID or Number!**", parse_mode="Markdown")
+        bot.reply_to(message, "⚠️ Error: Command ke saath ID ya Number bhi daalo!")
         return
 
     mode = 'uid' if 'uid' in cmd_parts[0] else 'num'
-    val = cmd_parts[1]
+    target_val = cmd_parts[1]
     
-    status_msg = bot.reply_to(message, "🛰 **Accessing Pardhan Database...**\n*Fetching fresh intel for you...*", parse_mode="Markdown")
+    status_msg = bot.reply_to(message, "🔍 **Searching in Pardhan Database...**", parse_mode="Markdown")
     
+    # Running async function in telebot thread
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    result = loop.run_until_complete(fetch_intel(val, mode))
+    final_output = loop.run_until_complete(fetch_intel(target_val, mode))
     loop.close()
     
-    # Final Output Professional Design
-    final_output = f"🏁 **INTEL DECRYPTED SUCCESSFULLY**\n\n{result}"
-    bot.edit_message_text(final_output, message.chat.id, status_msg.message_id, parse_mode="Markdown")
+    bot.edit_message_text(final_output, message.chat.id, status_msg.message_id)
 
-# --- [RENDER SETUP] ---
+# --- [RENDER 24/7 SETUP] ---
 @app.route('/')
-def home(): return "Pardhan Bot is Online ⚡"
+def home(): 
+    return "Pardhan Bot is Live & Active!"
+
+def run_flask(): 
+    app.run(host='0.0.0.0', port=8080)
 
 if __name__ == "__main__":
-    Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
-    print("Beast OSINT Bot is Live! 🚀")
+    print("Beast Bot Starting...")
+    Thread(target=run_flask).start() # Flask server starts in background
     bot.infinity_polling()
