@@ -18,10 +18,10 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
-# Admin Setup
+# Admin & Channel Setup
 ADMIN_ID = 1431950109
-FORCE_JOIN_CHANNEL = "@beast_harry"
-force_join_active = False # Restart ke baad default OFF rahega
+FORCE_JOIN_CHANNEL = "@ANONYMOUS_GROUP_KING" # Tera naya channel link
+force_join_active = False 
 user_selection = {}
 
 # Branding Setup
@@ -41,7 +41,6 @@ def beast_cleaner(text):
         if found.lower() in [TARGET_BOT_UID.lower(), TARGET_BOT_NUM.lower()]: return found
         return MY_USERNAME
     text = re.sub(username_pattern, replace_un, text)
-    # Remove text-based branding from result
     text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer).*', '', text)
     return text.strip()
 
@@ -74,7 +73,7 @@ async def fetch_intel(search_val, mode):
 
 # --- [HELPERS] ---
 def disappear_timer(chat_id, message_id):
-    time.sleep(60) # 1 Minute wait
+    time.sleep(60) 
     try: bot.delete_message(chat_id, message_id)
     except: pass
 
@@ -83,7 +82,7 @@ def check_membership(user_id):
         status = bot.get_chat_member(FORCE_JOIN_CHANNEL, user_id).status
         return status in ['member', 'administrator', 'creator']
     except:
-        return True # Error aane par allow kar do taaki bot block na ho
+        return False # Agar error aaye toh False rakho verification ke liye
 
 # --- [UI HANDLERS] ---
 
@@ -93,7 +92,6 @@ def welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add(types.KeyboardButton("👤 USER ID Search"), types.KeyboardButton("📱 NUMBER Search"))
     
-    # Admin Exclusive Button
     if message.from_user.id == ADMIN_ID:
         markup.add(types.KeyboardButton("🛠 ADMIN PANEL"))
     
@@ -101,13 +99,8 @@ def welcome(message):
         f"💀 **Welcome, {user_name}!** 💀\n\n"
         "⚡ **PARDHAN JI OSINT** ⚡\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🛰 **USAGE GUIDE:**\n"
-        "Select search mode. Send User ID or Mobile Number.\n\n"
-        "💡 **EXAMPLES:**\n"
-        "• **UserID:** `123456789` \n"
-        "• **Mobile:** `917282942060` \n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"Developer: @beast\_harry"
+        "Select search mode and send your target ID/Number.\n\n"
+        f"**Developer:** {MY_USERNAME}"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=markup)
 
@@ -117,7 +110,7 @@ def admin_menu(message):
     status = "✅ ON" if force_join_active else "❌ OFF"
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton(f"Force Join: {status}", callback_data="toggle_fj"))
-    bot.send_message(message.chat.id, "🛠 **ADMIN CONTROL CENTER**\nClick below to toggle Force Join:", reply_markup=markup)
+    bot.send_message(message.chat.id, "🛠 **ADMIN CONTROL CENTER**\n\nManage Force Join verification:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "toggle_fj")
 def toggle_fj(call):
@@ -140,11 +133,11 @@ def handle_input(message):
         user_selection.pop(message.chat.id, None)
         return
 
-    # --- [FORCE JOIN CHECK] ---
+    # --- [CHANNEL VERIFICATION CHECK] ---
     if force_join_active and not check_membership(message.from_user.id):
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("Join Channel 📢", url=f"https://t.me/{FORCE_JOIN_CHANNEL.replace('@', '')}"))
-        bot.reply_to(message, "⚠️ **Verification Required!**\nPlease join our channel first to use this search.", reply_markup=markup)
+        markup.add(types.InlineKeyboardButton("Join Channel 📢", url=f"https://t.me/ANONYMOUS_GROUP_KING"))
+        bot.reply_to(message, "⚠️ **Verification Required!**\n\nPlease join our channel first to access the database search result.", reply_markup=markup)
         return
 
     mode = user_selection.pop(message.chat.id)
