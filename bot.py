@@ -18,10 +18,10 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
-# Admin & Channel Setup
+# Admin & Channel Config
 ADMIN_ID = 1431950109
-FORCE_JOIN_CHANNEL = "@ANONYMOUS_GROUP_KING" # Tera naya channel link
-force_join_active = False 
+FORCE_JOIN_CHANNEL = "@ANONYMOUS_GROUP_KING" 
+force_join_active = False # Default OFF (Manual ON kerna padega)
 user_selection = {}
 
 # Branding Setup
@@ -41,6 +41,7 @@ def beast_cleaner(text):
         if found.lower() in [TARGET_BOT_UID.lower(), TARGET_BOT_NUM.lower()]: return found
         return MY_USERNAME
     text = re.sub(username_pattern, replace_un, text)
+    # Remove text branding
     text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer).*', '', text)
     return text.strip()
 
@@ -66,7 +67,7 @@ async def fetch_intel(search_val, mode):
                     return "❌ Database mein koi record nahi mila, Boss!"
                 await asyncio.sleep(1)
             await client.disconnect()
-            return "❌ Response kaafi slow hai, thodi der baad try karein."
+            return "❌ Response slow hai, baad mein try karein."
     except Exception as e:
         if client.is_connected(): await client.disconnect()
         return f"❌ System Error: {str(e)}"
@@ -82,7 +83,7 @@ def check_membership(user_id):
         status = bot.get_chat_member(FORCE_JOIN_CHANNEL, user_id).status
         return status in ['member', 'administrator', 'creator']
     except:
-        return False # Agar error aaye toh False rakho verification ke liye
+        return False # Verification fail on error
 
 # --- [UI HANDLERS] ---
 
@@ -99,8 +100,8 @@ def welcome(message):
         f"💀 **Welcome, {user_name}!** 💀\n\n"
         "⚡ **PARDHAN JI OSINT** ⚡\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "Select search mode and send your target ID/Number.\n\n"
-        f"**Developer:** {MY_USERNAME}"
+        "Select search mode. Send User ID or Mobile Number.\n\n"
+        f"Developer: {MY_USERNAME}"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=markup)
 
@@ -110,7 +111,7 @@ def admin_menu(message):
     status = "✅ ON" if force_join_active else "❌ OFF"
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton(f"Force Join: {status}", callback_data="toggle_fj"))
-    bot.send_message(message.chat.id, "🛠 **ADMIN CONTROL CENTER**\n\nManage Force Join verification:", reply_markup=markup)
+    bot.send_message(message.chat.id, "🛠 **ADMIN CONTROL CENTER**\nClick below to toggle Force Join:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "toggle_fj")
 def toggle_fj(call):
@@ -133,11 +134,11 @@ def handle_input(message):
         user_selection.pop(message.chat.id, None)
         return
 
-    # --- [CHANNEL VERIFICATION CHECK] ---
+    # --- [FORCE JOIN CHECK] ---
     if force_join_active and not check_membership(message.from_user.id):
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("Join Channel 📢", url=f"https://t.me/ANONYMOUS_GROUP_KING"))
-        bot.reply_to(message, "⚠️ **Verification Required!**\n\nPlease join our channel first to access the database search result.", reply_markup=markup)
+        markup.add(types.InlineKeyboardButton("Join Channel 📢", url=f"https://t.me/{FORCE_JOIN_CHANNEL.replace('@', '')}"))
+        bot.reply_to(message, "⚠️ **Verification Required!**\nPlease join our channel first to use this search.", reply_markup=markup)
         return
 
     mode = user_selection.pop(message.chat.id)
