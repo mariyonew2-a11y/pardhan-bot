@@ -19,12 +19,14 @@ bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
 user_selection = {}
+
+# Branding Setup
 MY_TG_LINK = "https://t.me/beast_harry"
 MY_USERNAME = "@beast_harry"
 TARGET_BOT_UID = '@LootVerseInfo_Bot' 
 TARGET_BOT_NUM = '@LootVerseinfoBot'
 
-# --- [BEAST CLEANER - YOUR ORIGINAL LOGIC] ---
+# --- [BEAST CLEANER - NO TOUCH] ---
 def beast_cleaner(text):
     if not isinstance(text, str): return text
     tg_link_pattern = r'(https?://)?(t\.me|telegram\.me)/[a-zA-Z0-9_+/-]+'
@@ -35,11 +37,10 @@ def beast_cleaner(text):
         if found.lower() in [TARGET_BOT_UID.lower(), TARGET_BOT_NUM.lower()]: return found
         return MY_USERNAME
     text = re.sub(username_pattern, replace_un, text)
-    # Professional Developer Branding
-    text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer)', f'Developer: {MY_USERNAME}', text)
+    text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer)', 'Powered by Pardhan ji', text)
     return text
 
-# --- [CORE ENGINE - YOUR ORIGINAL LOGIC] ---
+# --- [CORE ENGINE - NO TOUCH] ---
 async def fetch_intel(search_val, mode):
     client = TelegramClient(StringSession(SESSION_STR), API_ID, API_HASH)
     await client.connect()
@@ -58,90 +59,92 @@ async def fetch_intel(search_val, mode):
                     return clean_res
                 if any(x in raw_text.upper() for x in ["NOT AVAILABLE", "NOT FOUND", "ERROR"]):
                     await client.disconnect()
-                    return "NOT_FOUND"
+                    return "❌ Database mein koi record nahi mila, Boss!"
                 await asyncio.sleep(1)
             await client.disconnect()
-            return "TIMEOUT"
-    except:
+            return "❌ Response kaafi slow hai, thodi der baad try karein."
+    except Exception as e:
         if client.is_connected(): await client.disconnect()
-        return "TIMEOUT"
+        return f"❌ System Error: {str(e)}"
 
-# --- [AUTO-DELETE TIMER FUNCTION] ---
-def disappear_msg(chat_id, message_id, base_text):
-    for i in range(20, -1, -1):
-        try:
-            bot.edit_message_text(f"{base_text}\n\n━━━━━━━━━━━━━━━━━━━━\n⏳ `Auto-Disappearing in {i}s...`", 
-                                  chat_id, message_id, parse_mode="Markdown")
-            time.sleep(1)
-        except: break
-    try: bot.delete_message(chat_id, message_id)
-    except: pass
+# --- [AUTO-DELETE LOGIC] ---
+def delete_after_delay(chat_id, message_id, delay):
+    time.sleep(delay)
+    try:
+        bot.delete_message(chat_id, message_id)
+    except:
+        pass
 
-# --- [UI HANDLERS] ---
-
+# --- [STEP 1: START COMMAND UPGRADE] ---
 @bot.message_handler(commands=['start'])
 def welcome(message):
     user_name = message.from_user.first_name
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add(types.KeyboardButton("👤 USER ID Search"), types.KeyboardButton("📱 NUMBER Search"))
     
-    welcome_msg = (
-        f"💀 **TERMINAL_ACCESS_GRANTED: {user_name}**\n\n"
-        "⚡ **PARDHAN OSINT v5.0 [HACKER_EDITION]**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "☣️ `SYSTEM: READY_TO_FETCH`\n"
-        f"👤 `OWNER: @beast_harry`\n\n"
-        "**Niche diye gaye buttons se mode select karein.**"
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    btn1 = types.KeyboardButton("👤 USER ID Search")
+    btn2 = types.KeyboardButton("📱 NUMBER Search")
+    markup.add(btn1, btn2)
+    
+    welcome_text = (
+        f"💀 **Welcome, {user_name}!** 💀\n\n"
+        "⚡ **PARDHAN JI OSINT** ⚡\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "📖 **USAGE GUIDE:**\n"
+        "Select a search mode from the buttons below. Once prompted, send the target details.\n\n"
+        "💡 **EXAMPLES:**\n"
+        "• **User ID:** `5412896320`\n"
+        "• **Mobile:** `917282942060`\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"**Developer:** {MY_USERNAME}"
     )
-    bot.send_message(message.chat.id, welcome_msg, parse_mode="Markdown", reply_markup=markup)
+    
+    bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text in ["👤 USER ID Search", "📱 NUMBER Search"])
-def set_search_mode(message):
-    mode = 'uid' if "USER" in message.text else 'num'
-    user_selection[message.chat.id] = mode
-    prompt = "ENTER_TARGET_ID" if mode == 'uid' else "ENTER_TARGET_MOBILE"
-    bot.reply_to(message, f"🛰 **SYSTEM_PROMPT:** `PROCEED_{prompt}:`", parse_mode="Markdown")
+def ask_for_input(message):
+    if message.text == "👤 USER ID Search":
+        user_selection[message.chat.id] = 'uid'
+        bot.reply_to(message, "👤 **Please Enter Telegram User ID:**", parse_mode="Markdown")
+    else:
+        user_selection[message.chat.id] = 'num'
+        bot.reply_to(message, "📱 **Please Enter Mobile Number:**", parse_mode="Markdown")
 
 @bot.message_handler(func=lambda message: message.chat.id in user_selection)
-def handle_input(message):
+def process_data_input(message):
     if message.text.startswith('/'):
         user_selection.pop(message.chat.id, None)
         return
 
-    mode = user_selection.pop(message.chat.id)
+    mode = user_selection[message.chat.id]
+    target_val = message.text
+    user_selection.pop(message.chat.id, None)
+
+    status_msg = bot.reply_to(message, "🛰 **Accessing Secure Database...**\n*Pardhan Ji is fetching intel, please wait...*", parse_mode="Markdown")
     
-    # --- Progress Bar Simulation ---
-    status_msg = bot.reply_to(message, "🛰 `INITIALIZING_FETCH...`", parse_mode="Markdown")
-    time.sleep(1)
-    bot.edit_message_text("🛰 `ACCESSING_SECURE_NODE...` \n`[▓▓▓░░░░░░░] 30%`", message.chat.id, status_msg.message_id, parse_mode="Markdown")
-    
-    # Core Logic Call (No Touch)
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    result = loop.run_until_complete(fetch_intel(message.text, mode))
+    final_output = loop.run_until_complete(fetch_intel(target_val, mode))
     loop.close()
     
-    # Final Hacker Layout
-    if result == "NOT_FOUND":
-        final_text = "❌ `ERROR: RECORD_NOT_FOUND_IN_DATABASE`"
-    elif result == "TIMEOUT":
-        final_text = "⚠️ `STATUS: SERVER_UNDER_MAINTENANCE`"
-    else:
-        final_text = (
-            "☢️ **PARDHAN_INTELLIGENCE_REPORT**\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            f"```json\n{result}\n```\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            f"⚡ **Developer:** {MY_USERNAME}"
-        )
+    # --- [STEP 2: CLEAN DESIGN & DEVELOPER TAG] ---
+    final_design = (
+        "🏁 **INTEL DECRYPTED SUCCESSFULLY**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{final_output}\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"**Developer:** {MY_USERNAME} ⚡"
+    )
+    
+    bot.edit_message_text(final_design, message.chat.id, status_msg.message_id, parse_mode="Markdown")
+    
+    # --- [STEP 3: AUTO-DISAPPEAR (20 SECONDS)] ---
+    Thread(target=delete_after_delay, args=(message.chat.id, status_msg.message_id, 20)).start()
 
-    # Disappearing Thread Start
-    Thread(target=disappear_msg, args=(message.chat.id, status_msg.message_id, final_text)).start()
-
-# --- [RENDER SETUP] ---
 @app.route('/')
-def home(): return "SYSTEM_ACTIVE"
+def home(): 
+    return "Pardhan Bot is Live! ⚡"
 
 if __name__ == "__main__":
+    print("Pardhan Ji OSINT Starting...")
     Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))).start()
     bot.infinity_polling()
