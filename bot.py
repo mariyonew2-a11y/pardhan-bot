@@ -18,11 +18,12 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
-# Admin & Channel Setup
+# Admin & State Config
 ADMIN_ID = 1431950109
 FORCE_JOIN_CHANNEL = "@ANONYMOUS_GROUP_KING" 
-force_join_active = False # Manual ON kerna padega Admin Panel se
+force_join_active = False 
 user_selection = {}
+pending_searches = {} # User ka input yaad rakhne ke liye
 
 # Branding Setup
 MY_TG_LINK = "https://t.me/beast_harry"
@@ -41,7 +42,6 @@ def beast_cleaner(text):
         if found.lower() in [TARGET_BOT_UID.lower(), TARGET_BOT_NUM.lower()]: return found
         return MY_USERNAME
     text = re.sub(username_pattern, replace_un, text)
-    # Remove text-based branding
     text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer).*', '', text)
     return text.strip()
 
@@ -74,7 +74,7 @@ async def fetch_intel(search_val, mode):
 
 # --- [HELPERS] ---
 def disappear_timer(chat_id, message_id):
-    time.sleep(60) # 1 Minute wait
+    time.sleep(60) 
     try: bot.delete_message(chat_id, message_id)
     except: pass
 
@@ -85,6 +85,23 @@ def check_membership(user_id):
     except:
         return False
 
+# Search function to avoid code repetition
+def start_secure_fetch(chat_id, user_input, mode, reply_to_id):
+    status_msg = bot.send_message(chat_id, "🛰 **Accessing Database...**\n*Pardhan Ji is fetching intel...*", 
+                                  parse_mode="Markdown", reply_to_message_id=reply_to_id)
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    final_output = loop.run_until_complete(fetch_intel(user_input, mode))
+    loop.close()
+    
+    final_design = f"🏁 **INTEL DECRYPTED SUCCESSFULLY**\n━━━━━━━━━━━━━━━━━━━━━━━━\n{final_output}\n━━━━━━━━━━━━━━━━━━━━━━━━"
+    markup_inline = types.InlineKeyboardMarkup()
+    markup_inline.add(types.InlineKeyboardButton(text="Developer ⚡", url=MY_TG_LINK))
+    
+    bot.edit_message_text(final_design, chat_id, status_msg.message_id, parse_mode="Markdown", reply_markup=markup_inline)
+    Thread(target=disappear_timer, args=(chat_id, status_msg.message_id)).start()
+
 # --- [UI HANDLERS] ---
 
 @bot.message_handler(commands=['start'])
@@ -92,8 +109,6 @@ def welcome(message):
     user_name = message.from_user.first_name
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add(types.KeyboardButton("👤 USER ID Search"), types.KeyboardButton("📱 NUMBER Search"))
-    
-    # Admin Exclusive Button
     if message.from_user.id == ADMIN_ID:
         markup.add(types.KeyboardButton("🛠 ADMIN PANEL"))
     
@@ -101,13 +116,8 @@ def welcome(message):
         f"💀 **Welcome, {user_name}!** 💀\n\n"
         "⚡ **PARDHAN JI OSINT** ⚡\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🛰 **USAGE GUIDE:**\n"
         "Select search mode. Send User ID or Mobile Number.\n\n"
-        "💡 **EXAMPLES:**\n"
-        "• **UserID:** `123456789` \n"
-        "• **Mobile:** `917282942060` \n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"Developer: @beast\_harry"
+        f"Developer: {MY_USERNAME}"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=markup)
 
@@ -117,7 +127,7 @@ def admin_menu(message):
     status = "✅ ON" if force_join_active else "❌ OFF"
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton(f"Force Join: {status}", callback_data="toggle_fj"))
-    bot.send_message(message.chat.id, "🛠 **ADMIN CONTROL CENTER**\nClick below to toggle Force Join:", reply_markup=markup)
+    bot.send_message(message.chat.id, "🛠 **ADMIN CONTROL CENTER**", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "toggle_fj")
 def toggle_fj(call):
@@ -140,33 +150,36 @@ def handle_input(message):
         user_selection.pop(message.chat.id, None)
         return
 
-    # --- [FORCE JOIN CHECK] ---
+    mode = user_selection.pop(message.chat.id)
+    user_input = message.text
+
+    # --- [REAL-TIME FORCE JOIN CHECK] ---
     if force_join_active and not check_membership(message.from_user.id):
+        # Pending search save kar lo
+        pending_searches[message.from_user.id] = {'val': user_input, 'mode': mode, 'mid': message.message_id}
+        
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("Join Channel 📢", url=f"https://t.me/ANONYMOUS_GROUP_KING"))
-        bot.reply_to(message, "⚠️ **Verification Required!**\nPlease join our channel first to use this search.", reply_markup=markup)
+        markup.add(types.InlineKeyboardButton("Join Channel 📢", url="https://t.me/ANONYMOUS_GROUP_KING"))
+        markup.add(types.InlineKeyboardButton("Verify & Continue ✅", callback_data="verify_join"))
+        
+        bot.reply_to(message, "⚠️ **Verification Required!**\n\nPlease join our channel first to access the search result.", reply_markup=markup)
         return
 
-    mode = user_selection.pop(message.chat.id)
-    status_msg = bot.reply_to(message, "🛰 **Accessing Database...**\n*Pardhan Ji is fetching intel...*", parse_mode="Markdown")
-    
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    final_output = loop.run_until_complete(fetch_intel(message.text, mode))
-    loop.close()
-    
-    # CLEAN DESIGN WITHOUT TEXT CREDIT
-    final_design = f"🏁 **INTEL DECRYPTED SUCCESSFULLY**\n━━━━━━━━━━━━━━━━━━━━━━━━\n{final_output}\n━━━━━━━━━━━━━━━━━━━━━━━━"
-    
-    # Inline button added here
-    markup_inline = types.InlineKeyboardMarkup()
-    markup_inline.add(types.InlineKeyboardButton(text="Developer ⚡", url=MY_TG_LINK))
-    
-    bot.edit_message_text(final_design, message.chat.id, status_msg.message_id, 
-                          parse_mode="Markdown", reply_markup=markup_inline)
-    
-    # Start timer thread (1 Minute)
-    Thread(target=disappear_timer, args=(message.chat.id, status_msg.message_id)).start()
+    # Agar member hai toh seedha search
+    start_secure_fetch(message.chat.id, user_input, mode, message.message_id)
+
+@bot.callback_query_handler(func=lambda call: call.data == "verify_join")
+def verify_callback(call):
+    user_id = call.from_user.id
+    if check_membership(user_id):
+        if user_id in pending_searches:
+            data = pending_searches.pop(user_id)
+            bot.edit_message_text("✅ **Verification Successful!**\nInitiating search...", call.message.chat.id, call.message.message_id)
+            start_secure_fetch(call.message.chat.id, data['val'], data['mode'], data['mid'])
+        else:
+            bot.answer_callback_query(call.id, "✅ Verified! Ab search mode select karein.")
+    else:
+        bot.answer_callback_query(call.id, "❌ Bhai, pehle join toh kar lo! Phir click karna.", show_alert=True)
 
 # --- [RENDER SETUP] ---
 @app.route('/')
