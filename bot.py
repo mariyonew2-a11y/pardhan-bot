@@ -18,12 +18,12 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
-# Admin & State Config
+# Admin & Channel Setup
 ADMIN_ID = 1431950109
 FORCE_JOIN_CHANNEL = "@ANONYMOUS_GROUP_KING" 
 force_join_active = False 
 user_selection = {}
-pending_searches = {} # User ka input yaad rakhne ke liye
+pending_data = {} # User ka input temporarily yaad rakhne ke liye
 
 # Branding Setup
 MY_TG_LINK = "https://t.me/beast_harry"
@@ -85,14 +85,14 @@ def check_membership(user_id):
     except:
         return False
 
-# Search function to avoid code repetition
-def start_secure_fetch(chat_id, user_input, mode, reply_to_id):
-    status_msg = bot.send_message(chat_id, "🛰 **Accessing Database...**\n*Pardhan Ji is fetching intel...*", 
-                                  parse_mode="Markdown", reply_to_message_id=reply_to_id)
+# Main Execution Wrapper (No Code Duplication)
+def execute_search_logic(chat_id, target_val, mode, reply_msg_id):
+    status_msg = bot.send_message(chat_id, "🛰 **Accessing Secure Database...**\n*Pardhan Ji is fetching intel, please wait...*", 
+                                  parse_mode="Markdown", reply_to_message_id=reply_msg_id)
     
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    final_output = loop.run_until_complete(fetch_intel(user_input, mode))
+    final_output = loop.run_until_complete(fetch_intel(target_val, mode))
     loop.close()
     
     final_design = f"🏁 **INTEL DECRYPTED SUCCESSFULLY**\n━━━━━━━━━━━━━━━━━━━━━━━━\n{final_output}\n━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -151,35 +151,35 @@ def handle_input(message):
         return
 
     mode = user_selection.pop(message.chat.id)
-    user_input = message.text
+    target_val = message.text
 
-    # --- [REAL-TIME FORCE JOIN CHECK] ---
+    # --- [REAL-TIME VERIFICATION CHECK] ---
     if force_join_active and not check_membership(message.from_user.id):
-        # Pending search save kar lo
-        pending_searches[message.from_user.id] = {'val': user_input, 'mode': mode, 'mid': message.message_id}
+        # Data ko save karo taaki verification ke baad use kar sakein
+        pending_data[message.from_user.id] = {'val': target_val, 'mode': mode, 'mid': message.message_id}
         
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("Join Channel 📢", url="https://t.me/ANONYMOUS_GROUP_KING"))
-        markup.add(types.InlineKeyboardButton("Verify & Continue ✅", callback_data="verify_join"))
+        markup.add(types.InlineKeyboardButton("Verify & Continue ✅", callback_data="verify_me"))
         
         bot.reply_to(message, "⚠️ **Verification Required!**\n\nPlease join our channel first to access the search result.", reply_markup=markup)
         return
 
     # Agar member hai toh seedha search
-    start_secure_fetch(message.chat.id, user_input, mode, message.message_id)
+    execute_search_logic(message.chat.id, target_val, mode, message.message_id)
 
-@bot.callback_query_handler(func=lambda call: call.data == "verify_join")
-def verify_callback(call):
+@bot.callback_query_handler(func=lambda call: call.data == "verify_me")
+def verify_btn_handler(call):
     user_id = call.from_user.id
     if check_membership(user_id):
-        if user_id in pending_searches:
-            data = pending_searches.pop(user_id)
-            bot.edit_message_text("✅ **Verification Successful!**\nInitiating search...", call.message.chat.id, call.message.message_id)
-            start_secure_fetch(call.message.chat.id, data['val'], data['mode'], data['mid'])
+        if user_id in pending_data:
+            info = pending_data.pop(user_id)
+            bot.edit_message_text("✅ **Success!** Starting search...", call.message.chat.id, call.message.message_id)
+            execute_search_logic(call.message.chat.id, info['val'], info['mode'], info['mid'])
         else:
-            bot.answer_callback_query(call.id, "✅ Verified! Ab search mode select karein.")
+            bot.answer_callback_query(call.id, "✅ Verified! Ab naya search shuru karein.")
     else:
-        bot.answer_callback_query(call.id, "❌ Bhai, pehle join toh kar lo! Phir click karna.", show_alert=True)
+        bot.answer_callback_query(call.id, "❌ Pehle join toh karo, Pardhan ji! 💀", show_alert=True)
 
 # --- [RENDER SETUP] ---
 @app.route('/')
