@@ -18,6 +18,7 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
+# State storage for users
 user_selection = {}
 
 # Branding Setup
@@ -67,15 +68,15 @@ async def fetch_intel(search_val, mode):
         if client.is_connected(): await client.disconnect()
         return f"❌ System Error: {str(e)}"
 
-# --- [AUTO-DELETE LOGIC] ---
-def delete_after_delay(chat_id, message_id, delay):
-    time.sleep(delay)
+# --- [AUTO-DELETE TIMER FUNCTION] ---
+def disappear_timer(chat_id, message_id):
+    time.sleep(20) # 20 Seconds Wait
     try:
         bot.delete_message(chat_id, message_id)
     except:
         pass
 
-# --- [STEP 1: START COMMAND UPGRADE] ---
+# --- [STEP 1: UPGRADED START COMMAND] ---
 @bot.message_handler(commands=['start'])
 def welcome(message):
     user_name = message.from_user.first_name
@@ -89,13 +90,14 @@ def welcome(message):
         f"💀 **Welcome, {user_name}!** 💀\n\n"
         "⚡ **PARDHAN JI OSINT** ⚡\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "📖 **USAGE GUIDE:**\n"
-        "Select a search mode from the buttons below. Once prompted, send the target details.\n\n"
+        "🛰 **USAGE GUIDE:**\n"
+        "Select your preferred search mode using the buttons below. Once prompted, "
+        "simply send the ID or Mobile Number to the bot.\n\n"
         "💡 **EXAMPLES:**\n"
-        "• **User ID:** `5412896320`\n"
-        "• **Mobile:** `917282942060`\n"
+        "• **UserID:** `123456789` (Numerical ID)\n"
+        "• **Number:** `917282942060` (With Country Code)\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"**Developer:** {MY_USERNAME}"
+        f"Developer: @beast\_harry"
     )
     
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=markup)
@@ -126,25 +128,30 @@ def process_data_input(message):
     final_output = loop.run_until_complete(fetch_intel(target_val, mode))
     loop.close()
     
-    # --- [STEP 2: CLEAN DESIGN & DEVELOPER TAG] ---
+    # --- [STEP 2: CLEANER DESIGN & DEVELOPER TAG] ---
     final_design = (
         "🏁 **INTEL DECRYPTED SUCCESSFULLY**\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"{final_output}\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"**Developer:** {MY_USERNAME} ⚡"
+        f"Developer: @beast\_harry ☢️"
     )
     
     bot.edit_message_text(final_design, message.chat.id, status_msg.message_id, parse_mode="Markdown")
     
     # --- [STEP 3: AUTO-DISAPPEAR (20 SECONDS)] ---
-    Thread(target=delete_after_delay, args=(message.chat.id, status_msg.message_id, 20)).start()
+    Thread(target=disappear_timer, args=(message.chat.id, status_msg.message_id)).start()
 
+# --- [RENDER SERVER SETUP] ---
 @app.route('/')
 def home(): 
-    return "Pardhan Bot is Live! ⚡"
+    return "SYSTEM_ACTIVE"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
 if __name__ == "__main__":
-    print("Pardhan Ji OSINT Starting...")
-    Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))).start()
+    print("Beast OSINT Terminal Starting...")
+    Thread(target=run_flask).start()
     bot.infinity_polling()
