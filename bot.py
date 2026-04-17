@@ -17,7 +17,7 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
-# State storage for users
+# State storage for users (Kaunsa button dabaya hai)
 user_selection = {}
 
 # Branding Setup
@@ -26,7 +26,7 @@ MY_USERNAME = "@beast_harry"
 TARGET_BOT_UID = '@LootVerseInfo_Bot' 
 TARGET_BOT_NUM = '@LootVerseinfoBot'
 
-# --- [BEAST CLEANER - NO TOUCH] ---
+# --- [BEAST CLEANER - YOUR ORIGINAL LOGIC] ---
 def beast_cleaner(text):
     if not isinstance(text, str): return text
     tg_link_pattern = r'(https?://)?(t\.me|telegram\.me)/[a-zA-Z0-9_+/-]+'
@@ -40,7 +40,7 @@ def beast_cleaner(text):
     text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer)', 'Powered by Pardhan ji', text)
     return text
 
-# --- [CORE ENGINE - NO TOUCH] ---
+# --- [CORE ENGINE - YOUR ORIGINAL LOGIC] ---
 async def fetch_intel(search_val, mode):
     client = TelegramClient(StringSession(SESSION_STR), API_ID, API_HASH)
     await client.connect()
@@ -91,29 +91,33 @@ def welcome(message):
     
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=markup)
 
-# Button Click Handler
+# Button Click Handler (Mode Selection)
 @bot.message_handler(func=lambda message: message.text in ["👤 USER ID Search", "📱 NUMBER Search"])
 def ask_for_input(message):
     if message.text == "👤 USER ID Search":
         user_selection[message.chat.id] = 'uid'
-        bot.reply_to(message, "🎯 **Please Enter Telegram User ID:**", parse_mode="Markdown")
+        bot.reply_to(message, "👤 **Please Enter Telegram User ID:**\n*(Example: 5412896320)*", parse_mode="Markdown")
     else:
         user_selection[message.chat.id] = 'num'
-        bot.reply_to(message, "🎯 **Please Enter Mobile Number:**", parse_mode="Markdown")
+        bot.reply_to(message, "📱 **Please Enter Mobile Number:**\n*(Example: 917282942060)*", parse_mode="Markdown")
 
-# Data Input Handler (Final Result Processing)
+# Data Input Handler (Final Search Processing)
 @bot.message_handler(func=lambda message: message.chat.id in user_selection)
 def process_data_input(message):
+    # Agar user koi command bhej de beech mein toh use skip karo
+    if message.text.startswith('/'):
+        user_selection.pop(message.chat.id, None)
+        return
+
     mode = user_selection[message.chat.id]
     target_val = message.text
     
-    # State reset kar do taaki logic clean rahe
-    del user_states[message.chat.id] if 'user_states' in locals() else None 
-    # State delete from local storage to allow fresh search
+    # Selection remove karo taaki agle search ke liye button dabana pade
     user_selection.pop(message.chat.id, None)
 
     status_msg = bot.reply_to(message, "🛰 **Accessing Secure Database...**\n*Pardhan Ji is fetching intel, please wait...*", parse_mode="Markdown")
     
+    # Async loop handling
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     final_output = loop.run_until_complete(fetch_intel(target_val, mode))
@@ -129,13 +133,18 @@ def process_data_input(message):
     
     bot.edit_message_text(final_design, message.chat.id, status_msg.message_id, parse_mode="Markdown")
 
-# --- [SERVER SETUP] ---
+# --- [RENDER SERVER SETUP] ---
 @app.route('/')
-def home(): return "Pardhan Bot is Live & Active! ⚡"
+def home(): 
+    return "Pardhan Bot is Live & Active! ⚡"
 
-def run_flask(): app.run(host='0.0.0.0', port=8080)
+def run_flask():
+    # Render dynamic port handler
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
 if __name__ == "__main__":
-    print("Beast Bot v4.0 (Button Edition) Starting...")
+    print("Beast Bot Starting...")
+    # Flask starts in a separate thread to not block the bot
     Thread(target=run_flask).start()
     bot.infinity_polling()
