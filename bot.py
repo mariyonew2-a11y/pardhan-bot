@@ -18,7 +18,10 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
-# State storage for users
+# Admin & State Config
+ADMIN_ID = 1431950109 
+FORCE_JOIN_CHANNEL = "@beast_harry" # Tera channel username
+force_join_active = False # Default OFF rahega restart ke baad
 user_selection = {}
 
 # Branding Setup
@@ -27,7 +30,7 @@ MY_USERNAME = "@beast_harry"
 TARGET_BOT_UID = '@LootVerseInfo_Bot' 
 TARGET_BOT_NUM = '@LootVerseinfoBot'
 
-# --- [BEAST CLEANER - MODIFIED TO REMOVE TEXT BRANDING] ---
+# --- [BEAST CLEANER - NO TOUCH] ---
 def beast_cleaner(text):
     if not isinstance(text, str): return text
     tg_link_pattern = r'(https?://)?(t\.me|telegram\.me)/[a-zA-Z0-9_+/-]+'
@@ -38,9 +41,7 @@ def beast_cleaner(text):
         if found.lower() in [TARGET_BOT_UID.lower(), TARGET_BOT_NUM.lower()]: return found
         return MY_USERNAME
     text = re.sub(username_pattern, replace_un, text)
-    
-    # Sirf text replace kar rahe hain, extra line add nahi kar rahe
-    text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer).*', '', text)
+    text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer)', 'Powered by Pardhan ji', text)
     return text.strip()
 
 # --- [CORE ENGINE - NO TOUCH] ---
@@ -70,13 +71,18 @@ async def fetch_intel(search_val, mode):
         if client.is_connected(): await client.disconnect()
         return f"❌ System Error: {str(e)}"
 
-# --- [AUTO-DELETE TIMER - UPDATED TO 60s] ---
+# --- [HELPERS] ---
 def disappear_timer(chat_id, message_id):
-    time.sleep(60) # 1 Minute delay
+    time.sleep(60) 
+    try: bot.delete_message(chat_id, message_id)
+    except: pass
+
+def is_user_member(user_id):
     try:
-        bot.delete_message(chat_id, message_id)
+        status = bot.get_chat_member(FORCE_JOIN_CHANNEL, user_id).status
+        return status in ['member', 'administrator', 'creator']
     except:
-        pass
+        return False
 
 # --- [UI HANDLERS] ---
 
@@ -88,29 +94,49 @@ def welcome(message):
     btn2 = types.KeyboardButton("📱 NUMBER Search")
     markup.add(btn1, btn2)
     
+    # Sirf Admin ko Admin Button dikhega
+    if message.from_user.id == ADMIN_ID:
+        btn_admin = types.KeyboardButton("🛠 ADMIN PANEL")
+        markup.add(btn_admin)
+    
     welcome_text = (
         f"💀 **Welcome, {user_name}!** 💀\n\n"
         "⚡ **PARDHAN JI OSINT** ⚡\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🛰 **USAGE GUIDE:**\n"
-        "Select your preferred search mode using the buttons below. Once prompted, "
-        "simply send the ID or Mobile Number to the bot.\n\n"
-        "💡 **EXAMPLES:**\n"
-        "• **UserID:** `123456789` \n"
-        "• **Mobile:** `917282942060` \n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"Developer: @beast\_harry"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Select your search mode using the buttons below.\n"
+        f"**Developer:** {MY_USERNAME}"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=markup)
 
+# Admin Panel UI
+@bot.message_handler(func=lambda message: message.text == "🛠 ADMIN PANEL" and message.from_user.id == ADMIN_ID)
+def admin_panel(message):
+    global force_join_active
+    status = "✅ ENABLED" if force_join_active else "❌ DISABLED"
+    
+    markup = types.InlineKeyboardMarkup()
+    btn_toggle = types.InlineKeyboardButton(f"Force Join: {status}", callback_data="toggle_join")
+    markup.add(btn_toggle)
+    
+    bot.send_message(message.chat.id, "🛠 **PARDHAN ADMIN CONTROL**\n\nManage bot settings below:", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data == "toggle_join")
+def toggle_callback(call):
+    global force_join_active
+    force_join_active = not force_join_active
+    status = "✅ ENABLED" if force_join_active else "❌ DISABLED"
+    
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton(f"Force Join: {status}", callback_data="toggle_join"))
+    
+    bot.edit_message_text(f"🛠 **PARDHAN ADMIN CONTROL**\n\nSettings Updated!", 
+                          call.message.chat.id, call.message.message_id, reply_markup=markup)
+
 @bot.message_handler(func=lambda message: message.text in ["👤 USER ID Search", "📱 NUMBER Search"])
 def ask_for_input(message):
-    if message.text == "👤 USER ID Search":
-        user_selection[message.chat.id] = 'uid'
-        bot.reply_to(message, "👤 **Please Enter Telegram User ID:**", parse_mode="Markdown")
-    else:
-        user_selection[message.chat.id] = 'num'
-        bot.reply_to(message, "📱 **Please Enter Mobile Number:**", parse_mode="Markdown")
+    mode = 'uid' if "USER" in message.text else 'num'
+    user_selection[message.chat.id] = mode
+    bot.reply_to(message, f"🎯 **Please Enter {'User ID' if mode == 'uid' else 'Mobile Number'}:**", parse_mode="Markdown")
 
 @bot.message_handler(func=lambda message: message.chat.id in user_selection)
 def process_data_input(message):
@@ -118,44 +144,32 @@ def process_data_input(message):
         user_selection.pop(message.chat.id, None)
         return
 
-    mode = user_selection[message.chat.id]
-    target_val = message.text
-    user_selection.pop(message.chat.id, None)
+    # --- [FORCE JOIN VERIFICATION CHECK] ---
+    if force_join_active and not is_user_member(message.from_user.id):
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("Join Channel 📢", url=f"https://t.me/{FORCE_JOIN_CHANNEL.replace('@', '')}"))
+        bot.reply_to(message, "⚠️ **Access Denied!**\n\nPlease join our channel first to use this bot.", reply_markup=markup)
+        return
 
-    status_msg = bot.reply_to(message, "🛰 **Accessing Secure Database...**\n*Pardhan Ji is fetching intel, please wait...*", parse_mode="Markdown")
+    mode = user_selection.pop(message.chat.id)
+    status_msg = bot.reply_to(message, "🛰 **Fetching intel, please wait...**", parse_mode="Markdown")
     
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    final_output = loop.run_until_complete(fetch_intel(target_val, mode))
+    final_output = loop.run_until_complete(fetch_intel(message.text, mode))
     loop.close()
     
-    # --- [CLEAN DESIGN WITH INLINE BUTTON] ---
-    final_design = (
-        "🏁 **INTEL DECRYPTED SUCCESSFULLY**\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"{final_output}\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━"
-    )
-    
-    # Inline button added here
+    final_design = f"🏁 **INTEL DECRYPTED**\n━━━━━━━━━━━━━━━━━━━━\n{final_output}\n━━━━━━━━━━━━━━━━━━━━"
     markup_inline = types.InlineKeyboardMarkup()
     markup_inline.add(types.InlineKeyboardButton(text="Developer ⚡", url=MY_TG_LINK))
     
-    bot.edit_message_text(final_design, message.chat.id, status_msg.message_id, 
-                          parse_mode="Markdown", reply_markup=markup_inline)
-    
-    # Start timer thread
+    bot.edit_message_text(final_design, message.chat.id, status_msg.message_id, parse_mode="Markdown", reply_markup=markup_inline)
     Thread(target=disappear_timer, args=(message.chat.id, status_msg.message_id)).start()
 
-# --- [RENDER SERVER SETUP] ---
+# --- [RENDER SETUP] ---
 @app.route('/')
 def home(): return "SYSTEM_ACTIVE"
 
-def run_flask():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
-
 if __name__ == "__main__":
-    print("Pardhan OSINT Final Edition Starting...")
-    Thread(target=run_flask).start()
+    Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))).start()
     bot.infinity_polling()
