@@ -18,10 +18,10 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
-# Admin & State Config
-ADMIN_ID = 1431950109 
-FORCE_JOIN_CHANNEL = "@beast_harry" # Tera channel username
-force_join_active = False # Default OFF rahega restart ke baad
+# Admin Setup
+ADMIN_ID = 1431950109
+FORCE_JOIN_CHANNEL = "@beast_harry"
+force_join_active = False # Restart ke baad default OFF rahega
 user_selection = {}
 
 # Branding Setup
@@ -41,7 +41,8 @@ def beast_cleaner(text):
         if found.lower() in [TARGET_BOT_UID.lower(), TARGET_BOT_NUM.lower()]: return found
         return MY_USERNAME
     text = re.sub(username_pattern, replace_un, text)
-    text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer)', 'Powered by Pardhan ji', text)
+    # Remove text-based branding from result
+    text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer).*', '', text)
     return text.strip()
 
 # --- [CORE ENGINE - NO TOUCH] ---
@@ -73,16 +74,16 @@ async def fetch_intel(search_val, mode):
 
 # --- [HELPERS] ---
 def disappear_timer(chat_id, message_id):
-    time.sleep(60) 
+    time.sleep(60) # 1 Minute wait
     try: bot.delete_message(chat_id, message_id)
     except: pass
 
-def is_user_member(user_id):
+def check_membership(user_id):
     try:
         status = bot.get_chat_member(FORCE_JOIN_CHANNEL, user_id).status
         return status in ['member', 'administrator', 'creator']
     except:
-        return False
+        return True # Error aane par allow kar do taaki bot block na ho
 
 # --- [UI HANDLERS] ---
 
@@ -90,47 +91,42 @@ def is_user_member(user_id):
 def welcome(message):
     user_name = message.from_user.first_name
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn1 = types.KeyboardButton("👤 USER ID Search")
-    btn2 = types.KeyboardButton("📱 NUMBER Search")
-    markup.add(btn1, btn2)
+    markup.add(types.KeyboardButton("👤 USER ID Search"), types.KeyboardButton("📱 NUMBER Search"))
     
-    # Sirf Admin ko Admin Button dikhega
+    # Admin Exclusive Button
     if message.from_user.id == ADMIN_ID:
-        btn_admin = types.KeyboardButton("🛠 ADMIN PANEL")
-        markup.add(btn_admin)
+        markup.add(types.KeyboardButton("🛠 ADMIN PANEL"))
     
     welcome_text = (
         f"💀 **Welcome, {user_name}!** 💀\n\n"
         "⚡ **PARDHAN JI OSINT** ⚡\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "Select your search mode using the buttons below.\n"
-        f"**Developer:** {MY_USERNAME}"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "🛰 **USAGE GUIDE:**\n"
+        "Select search mode. Send User ID or Mobile Number.\n\n"
+        "💡 **EXAMPLES:**\n"
+        "• **UserID:** `123456789` \n"
+        "• **Mobile:** `917282942060` \n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Developer: @beast\_harry"
     )
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=markup)
 
-# Admin Panel UI
 @bot.message_handler(func=lambda message: message.text == "🛠 ADMIN PANEL" and message.from_user.id == ADMIN_ID)
-def admin_panel(message):
+def admin_menu(message):
     global force_join_active
-    status = "✅ ENABLED" if force_join_active else "❌ DISABLED"
-    
+    status = "✅ ON" if force_join_active else "❌ OFF"
     markup = types.InlineKeyboardMarkup()
-    btn_toggle = types.InlineKeyboardButton(f"Force Join: {status}", callback_data="toggle_join")
-    markup.add(btn_toggle)
-    
-    bot.send_message(message.chat.id, "🛠 **PARDHAN ADMIN CONTROL**\n\nManage bot settings below:", reply_markup=markup)
+    markup.add(types.InlineKeyboardButton(f"Force Join: {status}", callback_data="toggle_fj"))
+    bot.send_message(message.chat.id, "🛠 **ADMIN CONTROL CENTER**\nClick below to toggle Force Join:", reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda call: call.data == "toggle_join")
-def toggle_callback(call):
+@bot.callback_query_handler(func=lambda call: call.data == "toggle_fj")
+def toggle_fj(call):
     global force_join_active
     force_join_active = not force_join_active
-    status = "✅ ENABLED" if force_join_active else "❌ DISABLED"
-    
+    status = "✅ ON" if force_join_active else "❌ OFF"
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton(f"Force Join: {status}", callback_data="toggle_join"))
-    
-    bot.edit_message_text(f"🛠 **PARDHAN ADMIN CONTROL**\n\nSettings Updated!", 
-                          call.message.chat.id, call.message.message_id, reply_markup=markup)
+    markup.add(types.InlineKeyboardButton(f"Force Join: {status}", callback_data="toggle_fj"))
+    bot.edit_message_text("🛠 **ADMIN CONTROL CENTER**\nSettings Updated!", call.message.chat.id, call.message.message_id, reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text in ["👤 USER ID Search", "📱 NUMBER Search"])
 def ask_for_input(message):
@@ -139,27 +135,27 @@ def ask_for_input(message):
     bot.reply_to(message, f"🎯 **Please Enter {'User ID' if mode == 'uid' else 'Mobile Number'}:**", parse_mode="Markdown")
 
 @bot.message_handler(func=lambda message: message.chat.id in user_selection)
-def process_data_input(message):
+def handle_input(message):
     if message.text.startswith('/'):
         user_selection.pop(message.chat.id, None)
         return
 
-    # --- [FORCE JOIN VERIFICATION CHECK] ---
-    if force_join_active and not is_user_member(message.from_user.id):
+    # --- [FORCE JOIN CHECK] ---
+    if force_join_active and not check_membership(message.from_user.id):
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("Join Channel 📢", url=f"https://t.me/{FORCE_JOIN_CHANNEL.replace('@', '')}"))
-        bot.reply_to(message, "⚠️ **Access Denied!**\n\nPlease join our channel first to use this bot.", reply_markup=markup)
+        bot.reply_to(message, "⚠️ **Verification Required!**\nPlease join our channel first to use this search.", reply_markup=markup)
         return
 
     mode = user_selection.pop(message.chat.id)
-    status_msg = bot.reply_to(message, "🛰 **Fetching intel, please wait...**", parse_mode="Markdown")
+    status_msg = bot.reply_to(message, "🛰 **Accessing Database...**\n*Pardhan Ji is fetching intel...*", parse_mode="Markdown")
     
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     final_output = loop.run_until_complete(fetch_intel(message.text, mode))
     loop.close()
     
-    final_design = f"🏁 **INTEL DECRYPTED**\n━━━━━━━━━━━━━━━━━━━━\n{final_output}\n━━━━━━━━━━━━━━━━━━━━"
+    final_design = f"🏁 **INTEL DECRYPTED SUCCESSFULLY**\n━━━━━━━━━━━━━━━━━━━━━━━━\n{final_output}\n━━━━━━━━━━━━━━━━━━━━━━━━"
     markup_inline = types.InlineKeyboardMarkup()
     markup_inline.add(types.InlineKeyboardButton(text="Developer ⚡", url=MY_TG_LINK))
     
