@@ -1,6 +1,5 @@
-pytelegrambotapi
+pyTelegramBotAPI
 telethon
 flask
-gunicorn
 supabase
-postgrest
+python-dotenv 
