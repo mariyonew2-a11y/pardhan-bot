@@ -21,7 +21,7 @@ app = Flask('')
 # Admin & Channel Setup
 ADMIN_ID = 1431950109
 FORCE_JOIN_CHANNEL = "@ANONYMOUS_GROUP_KING" 
-force_join_active = False # Manual ON kerna padega Admin Panel se
+force_join_active = False
 user_selection = {}
 
 # Branding Setup
@@ -41,7 +41,6 @@ def beast_cleaner(text):
         if found.lower() in [TARGET_BOT_UID.lower(), TARGET_BOT_NUM.lower()]: return found
         return MY_USERNAME
     text = re.sub(username_pattern, replace_un, text)
-    # Remove text-based branding
     text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer).*', '', text)
     return text.strip()
 
@@ -72,18 +71,28 @@ async def fetch_intel(search_val, mode):
         if client.is_connected(): await client.disconnect()
         return f"❌ System Error: {str(e)}"
 
-# --- [HELPERS] ---
+# --- [HELPERS FIXED] ---
 def disappear_timer(chat_id, message_id):
-    time.sleep(60) # 1 Minute wait
+    time.sleep(60)
     try: bot.delete_message(chat_id, message_id)
     except: pass
 
 def check_membership(user_id):
     try:
-        status = bot.get_chat_member(FORCE_JOIN_CHANNEL, user_id).status
-        return status in ['member', 'administrator', 'creator']
-    except:
+        member = bot.get_chat_member(FORCE_JOIN_CHANNEL, user_id)
+        return member.status in ['member', 'administrator', 'creator']
+    except Exception as e:
+        print("Join Check Error:", e)
         return False
+
+# --- VERIFY BUTTON HANDLER ---
+@bot.callback_query_handler(func=lambda call: call.data == "verify_join")
+def verify_join(call):
+    if check_membership(call.from_user.id):
+        bot.answer_callback_query(call.id, "✅ Verified! Ab use kar sakte ho.")
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+    else:
+        bot.answer_callback_query(call.id, "❌ Pehle channel join karo!")
 
 # --- [UI HANDLERS] ---
 
@@ -93,7 +102,6 @@ def welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add(types.KeyboardButton("👤 USER ID Search"), types.KeyboardButton("📱 NUMBER Search"))
     
-    # Admin Exclusive Button
     if message.from_user.id == ADMIN_ID:
         markup.add(types.KeyboardButton("🛠 ADMIN PANEL"))
     
@@ -140,11 +148,14 @@ def handle_input(message):
         user_selection.pop(message.chat.id, None)
         return
 
-    # --- [FORCE JOIN CHECK] ---
+    # --- FORCE JOIN FIXED ---
     if force_join_active and not check_membership(message.from_user.id):
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("Join Channel 📢", url=f"https://t.me/ANONYMOUS_GROUP_KING"))
-        bot.reply_to(message, "⚠️ **Verification Required!**\nPlease join our channel first to use this search.", reply_markup=markup)
+        markup.add(
+            types.InlineKeyboardButton("Join Channel 📢", url="https://t.me/ANONYMOUS_GROUP_KING"),
+            types.InlineKeyboardButton("Verify ✅", callback_data="verify_join")
+        )
+        bot.reply_to(message, "⚠️ **Verification Required!**\nChannel join karke Verify button dabao.", reply_markup=markup)
         return
 
     mode = user_selection.pop(message.chat.id)
@@ -155,17 +166,14 @@ def handle_input(message):
     final_output = loop.run_until_complete(fetch_intel(message.text, mode))
     loop.close()
     
-    # CLEAN DESIGN WITHOUT TEXT CREDIT
     final_design = f"🏁 **INTEL DECRYPTED SUCCESSFULLY**\n━━━━━━━━━━━━━━━━━━━━━━━━\n{final_output}\n━━━━━━━━━━━━━━━━━━━━━━━━"
     
-    # Inline button added here
     markup_inline = types.InlineKeyboardMarkup()
     markup_inline.add(types.InlineKeyboardButton(text="Developer ⚡", url=MY_TG_LINK))
     
     bot.edit_message_text(final_design, message.chat.id, status_msg.message_id, 
                           parse_mode="Markdown", reply_markup=markup_inline)
     
-    # Start timer thread (1 Minute)
     Thread(target=disappear_timer, args=(message.chat.id, status_msg.message_id)).start()
 
 # --- [RENDER SETUP] ---
