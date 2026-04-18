@@ -2,3 +2,5 @@ pytelegrambotapi
 telethon
 flask
 gunicorn
+supabase
+postgrest
