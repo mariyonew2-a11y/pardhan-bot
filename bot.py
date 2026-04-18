@@ -4,9 +4,15 @@ from telethon.sessions import StringSession
 import asyncio
 import re
 import os
+import time
 from flask import Flask
 from threading import Thread
 from telebot import types
+
+# 🔥 NEW IMPORTS
+import random
+import string
+from datetime import datetime, timedelta
 
 # --- [CONFIG - NO TOUCH] ---
 API_ID = 34871644 
@@ -17,8 +23,15 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
 
-# State storage for users (Kaunsa button dabaya hai)
+# Admin & Channel Setup
+ADMIN_ID = 1431950109
+FORCE_JOIN_CHANNEL = "@pardhan_g"
+force_join_active = False
 user_selection = {}
+
+# 🔥 NEW STORAGE
+active_keys = {}   # key: {expiry, uses}
+user_verified = {}
 
 # Branding Setup
 MY_TG_LINK = "https://t.me/beast_harry"
@@ -26,7 +39,11 @@ MY_USERNAME = "@beast_harry"
 TARGET_BOT_UID = '@LootVerseInfo_Bot' 
 TARGET_BOT_NUM = '@LootVerseinfoBot'
 
-# --- [BEAST CLEANER - YOUR ORIGINAL LOGIC] ---
+# --- 🔥 KEY GENERATOR ---
+def generate_key(length=8):
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+
+# --- [BEAST CLEANER - NO TOUCH] ---
 def beast_cleaner(text):
     if not isinstance(text, str): return text
     tg_link_pattern = r'(https?://)?(t\.me|telegram\.me)/[a-zA-Z0-9_+/-]+'
@@ -37,10 +54,10 @@ def beast_cleaner(text):
         if found.lower() in [TARGET_BOT_UID.lower(), TARGET_BOT_NUM.lower()]: return found
         return MY_USERNAME
     text = re.sub(username_pattern, replace_un, text)
-    text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer)', 'Powered by Pardhan ji', text)
-    return text
+    text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer).*', '', text)
+    return text.strip()
 
-# --- [CORE ENGINE - YOUR ORIGINAL LOGIC] ---
+# --- [CORE ENGINE - NO TOUCH] ---
 async def fetch_intel(search_val, mode):
     client = TelegramClient(StringSession(SESSION_STR), API_ID, API_HASH)
     await client.connect()
@@ -67,84 +84,175 @@ async def fetch_intel(search_val, mode):
         if client.is_connected(): await client.disconnect()
         return f"❌ System Error: {str(e)}"
 
-# --- [BUTTON INTERFACE UPGRADE] ---
+# --- [HELPERS] ---
+def disappear_timer(chat_id, message_id):
+    time.sleep(60)
+    try: bot.delete_message(chat_id, message_id)
+    except: pass
+
+def check_membership(user_id):
+    try:
+        member = bot.get_chat_member(FORCE_JOIN_CHANNEL, user_id)
+        return member.status in ['member', 'administrator', 'creator']
+    except:
+        return False
+
+# 🔥 VERIFY BUTTON (existing system compatible)
+@bot.callback_query_handler(func=lambda call: call.data == "verify_join")
+def verify_join(call):
+    if check_membership(call.from_user.id):
+        bot.answer_callback_query(call.id, "✅ Verified!")
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+    else:
+        bot.answer_callback_query(call.id, "❌ Join first!")
+
+# 🔥 ADMIN KEY GENERATE
+@bot.callback_query_handler(func=lambda call: call.data == "gen_key")
+def ask_key(call):
+    bot.send_message(call.message.chat.id,
+        "🔑 Send:\nTIME USES\nExample: 10 3\n(10 min, 3 users)")
+    user_selection[call.message.chat.id] = "gen_key"
+
+@bot.message_handler(func=lambda m: m.chat.id in user_selection and user_selection[m.chat.id] == "gen_key")
+def create_key(message):
+    try:
+        time_min, uses = map(int, message.text.split())
+        key = generate_key()
+        expiry = datetime.now() + timedelta(minutes=time_min)
+
+        active_keys[key] = {
+            "expiry": expiry,
+            "uses": uses
+        }
+
+        bot.reply_to(message,
+            f"🔑 Key: `{key}`\n⏳ {time_min} min\n👥 {uses} users",
+            parse_mode="Markdown"
+        )
+    except:
+        bot.reply_to(message, "❌ Invalid Format")
+
+    user_selection.pop(message.chat.id, None)
+
+# 🔥 USER KEY VERIFY
+@bot.message_handler(func=lambda m: m.text and m.text.startswith("KEY "))
+def verify_key(message):
+    key = message.text.split(" ",1)[1]
+
+    if key in active_keys:
+        data = active_keys[key]
+
+        if datetime.now() > data["expiry"]:
+            bot.reply_to(message, "❌ Key Expired")
+            return
+
+        if data["uses"] <= 0:
+            bot.reply_to(message, "❌ Key Limit Over")
+            return
+
+        data["uses"] -= 1
+        user_verified[message.from_user.id] = True
+
+        bot.reply_to(message, "✅ Successfully Verified")
+    else:
+        bot.reply_to(message, "❌ Invalid Key")
+
+# --- [UI HANDLERS] ---
 
 @bot.message_handler(commands=['start'])
 def welcome(message):
     user_name = message.from_user.first_name
-    
-    # Niche wale buttons (Reply Keyboard)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn1 = types.KeyboardButton("👤 USER ID Search")
-    btn2 = types.KeyboardButton("📱 NUMBER Search")
-    markup.add(btn1, btn2)
+    markup.add(types.KeyboardButton("👤 USER ID Search"), types.KeyboardButton("📱 NUMBER Search"))
+    
+    if message.from_user.id == ADMIN_ID:
+        markup.add(types.KeyboardButton("🛠 ADMIN PANEL"))
     
     welcome_text = (
-        f"👋 **Namaste {user_name} ji!**\n\n"
-        "⚡ **PARDHAN OSINT TERMINAL v4.0** ⚡\n"
+        f"💀 **Welcome, {user_name}!** 💀\n\n"
+        "⚡ **PARDHAN JI OSINT** ⚡\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "Niche diye gaye buttons ka use karke intel nikalna shuru karein. "
-        "Bas mode select karein aur ID ya Number bhejein.\n"
+        "🛰 **USAGE GUIDE:**\n"
+        "Select search mode. Send User ID or Mobile Number.\n\n"
+        "💡 **EXAMPLES:**\n"
+        "• **UserID:** `123456789` \n"
+        "• **Mobile:** `917282942060` \n"
         "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "**Owner:** @beast\_harry"
+        f"Developer: @beast\_harry"
     )
-    
     bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=markup)
 
-# Button Click Handler (Mode Selection)
+@bot.message_handler(func=lambda message: message.text == "🛠 ADMIN PANEL" and message.from_user.id == ADMIN_ID)
+def admin_menu(message):
+    global force_join_active
+    status = "✅ ON" if force_join_active else "❌ OFF"
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton(f"Force Join: {status}", callback_data="toggle_fj"),
+        types.InlineKeyboardButton("Generate Key 🔑", callback_data="gen_key")  # 🔥 added
+    )
+    bot.send_message(message.chat.id, "🛠 **ADMIN CONTROL CENTER**\nClick below:", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data == "toggle_fj")
+def toggle_fj(call):
+    global force_join_active
+    force_join_active = not force_join_active
+    status = "✅ ON" if force_join_active else "❌ OFF"
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton(f"Force Join: {status}", callback_data="toggle_fj"))
+    bot.edit_message_text("🛠 Updated!", call.message.chat.id, call.message.message_id, reply_markup=markup)
+
 @bot.message_handler(func=lambda message: message.text in ["👤 USER ID Search", "📱 NUMBER Search"])
 def ask_for_input(message):
-    if message.text == "👤 USER ID Search":
-        user_selection[message.chat.id] = 'uid'
-        bot.reply_to(message, "👤 **Please Enter Telegram User ID:**\n*(Example: 5412896320)*", parse_mode="Markdown")
-    else:
-        user_selection[message.chat.id] = 'num'
-        bot.reply_to(message, "📱 **Please Enter Mobile Number:**\n*(Example: 917282942060)*", parse_mode="Markdown")
+    mode = 'uid' if "USER" in message.text else 'num'
+    user_selection[message.chat.id] = mode
+    bot.reply_to(message, f"🎯 **Please Enter {'User ID' if mode == 'uid' else 'Mobile Number'}:**", parse_mode="Markdown")
 
-# Data Input Handler (Final Search Processing)
 @bot.message_handler(func=lambda message: message.chat.id in user_selection)
-def process_data_input(message):
-    # Agar user koi command bhej de beech mein toh use skip karo
+def handle_input(message):
     if message.text.startswith('/'):
         user_selection.pop(message.chat.id, None)
         return
 
-    mode = user_selection[message.chat.id]
-    target_val = message.text
-    
-    # Selection remove karo taaki agle search ke liye button dabana pade
-    user_selection.pop(message.chat.id, None)
+    # 🔥 FORCE JOIN + PASSWORD FLOW
+    if force_join_active:
 
-    status_msg = bot.reply_to(message, "🛰 **Accessing Secure Database...**\n*Pardhan Ji is fetching intel, please wait...*", parse_mode="Markdown")
+        if not check_membership(message.from_user.id):
+            markup = types.InlineKeyboardMarkup()
+            markup.add(
+                types.InlineKeyboardButton("Join Channel 📢", url="https://t.me/pardhan_g"),
+                types.InlineKeyboardButton("Verify ✅", callback_data="verify_join")
+            )
+            bot.reply_to(message, "⚠️ Join channel first", reply_markup=markup)
+            return
+
+        if not user_verified.get(message.from_user.id):
+            bot.reply_to(message, "🔐 Enter Password:\nUse → KEY XXXXX")
+            return
+
+    mode = user_selection.pop(message.chat.id)
+    status_msg = bot.reply_to(message, "🛰 **Accessing Database...**", parse_mode="Markdown")
     
-    # Async loop handling
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    final_output = loop.run_until_complete(fetch_intel(target_val, mode))
+    final_output = loop.run_until_complete(fetch_intel(message.text, mode))
     loop.close()
     
-    final_design = (
-        "🏁 **INTEL DECRYPTED SUCCESSFULLY**\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"{final_output}\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "**Verified by:** @beast\_harry"
-    )
+    final_design = f"🏁 **INTEL DECRYPTED SUCCESSFULLY**\n━━━━━━━━━━━━━━━━━━━━━━━━\n{final_output}\n━━━━━━━━━━━━━━━━━━━━━━━━"
     
-    bot.edit_message_text(final_design, message.chat.id, status_msg.message_id, parse_mode="Markdown")
+    markup_inline = types.InlineKeyboardMarkup()
+    markup_inline.add(types.InlineKeyboardButton(text="Developer ⚡", url=MY_TG_LINK))
+    
+    bot.edit_message_text(final_design, message.chat.id, status_msg.message_id, 
+                          parse_mode="Markdown", reply_markup=markup_inline)
+    
+    Thread(target=disappear_timer, args=(message.chat.id, status_msg.message_id)).start()
 
-# --- [RENDER SERVER SETUP] ---
+# --- [RENDER SETUP] ---
 @app.route('/')
-def home(): 
-    return "Pardhan Bot is Live & Active! ⚡"
-
-def run_flask():
-    # Render dynamic port handler
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
+def home(): return "SYSTEM_ACTIVE"
 
 if __name__ == "__main__":
-    print("Beast Bot Starting...")
-    # Flask starts in a separate thread to not block the bot
-    Thread(target=run_flask).start()
+    port = int(os.environ.get("PORT", 8080))
+    Thread(target=lambda: app.run(host='0.0.0.0', port=port)).start()
     bot.infinity_polling()
