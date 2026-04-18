@@ -14,19 +14,11 @@ import random
 import string
 from datetime import datetime, timedelta
 
-# 🔥 DB IMPORT
-from supabase import create_client
-
 # --- [CONFIG - NO TOUCH] ---
 API_ID = 34871644 
 API_HASH = '9ab73b2a48115feed25b5029c812ea29'
 SESSION_STR = os.environ.get('TELETHON_SESSION') 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
-
-# 🔥 SUPABASE CONFIG
-SUPABASE_URL = "https://ygmoyfmvhwziwqshgoum.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlnbW95Zm12aHd6aXdxc2hnb3VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0OTI0MjEsImV4cCI6MjA5MjA2ODQyMX0.mcVD1Spg49vXjsFLidbCw_zTuJMomdcxo8fcES6ya3Y"
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask('')
@@ -37,8 +29,8 @@ FORCE_JOIN_CHANNEL = "@pardhan_g"
 force_join_active = False
 user_selection = {}
 
-# 🔥 RAM STORAGE (UNCHANGED)
-active_keys = {}
+# 🔥 NEW STORAGE
+active_keys = {}   # key: {expiry, uses}
 user_verified = {}
 
 # Branding Setup
@@ -47,69 +39,11 @@ MY_USERNAME = "@beast_harry"
 TARGET_BOT_UID = '@LootVerseInfo_Bot' 
 TARGET_BOT_NUM = '@LootVerseinfoBot'
 
-# =========================
-# 🔥 DB FUNCTIONS
-# =========================
-
-def db_save_key(key, expiry, uses):
-    try:
-        supabase.table("keys").insert({
-            "key": key,
-            "expiry": expiry.isoformat(),
-            "uses_left": uses
-        }).execute()
-    except Exception as e:
-        print("DB SAVE ERROR:", e)
-
-def db_verify_key(key):
-    try:
-        res = supabase.table("keys").select("*").eq("key", key).execute()
-        if not res.data:
-            return None
-
-        data = res.data[0]
-
-        if datetime.now() > datetime.fromisoformat(data["expiry"]):
-            return "expired"
-
-        if data["uses_left"] <= 0:
-            return "limit"
-
-        supabase.table("keys").update({
-            "uses_left": data["uses_left"] - 1
-        }).eq("key", key).execute()
-
-        return "ok"
-
-    except Exception as e:
-        print("DB VERIFY ERROR:", e)
-        return None
-
-def db_set_verified(user_id):
-    try:
-        supabase.table("users").upsert({
-            "user_id": user_id,
-            "verified": True
-        }).execute()
-    except:
-        pass
-
-def db_is_verified(user_id):
-    try:
-        res = supabase.table("users").select("*").eq("user_id", user_id).execute()
-        if res.data:
-            return res.data[0]["verified"]
-    except:
-        pass
-    return False
-
-# =========================
-
 # --- 🔥 KEY GENERATOR ---
 def generate_key(length=8):
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
-# --- CLEANER ---
+# --- [BEAST CLEANER - NO TOUCH] ---
 def beast_cleaner(text):
     if not isinstance(text, str): return text
     tg_link_pattern = r'(https?://)?(t\.me|telegram\.me)/[a-zA-Z0-9_+/-]+'
@@ -123,7 +57,7 @@ def beast_cleaner(text):
     text = re.sub(r'(?i)(powered by|made by|developer|owner|api_developer).*', '', text)
     return text.strip()
 
-# --- CORE ---
+# --- [CORE ENGINE - NO TOUCH] ---
 async def fetch_intel(search_val, mode):
     client = TelegramClient(StringSession(SESSION_STR), API_ID, API_HASH)
     await client.connect()
@@ -135,18 +69,22 @@ async def fetch_intel(search_val, mode):
                 response = await conv.get_response()
                 raw_text = response.text
                 if "processing" in raw_text.lower(): continue
-                if len(raw_text) > 100:
+                success_indicators = ["RESULT FETCHED", "DETAILS FOR", "USER DATA", "METADATA", "{"]
+                if any(x in raw_text.upper() for x in success_indicators) or len(raw_text) > 100:
                     clean_res = beast_cleaner(raw_text)
                     await client.disconnect()
                     return clean_res
+                if any(x in raw_text.upper() for x in ["NOT AVAILABLE", "NOT FOUND", "ERROR"]):
+                    await client.disconnect()
+                    return "❌ Database mein koi record nahi mila, Boss!"
                 await asyncio.sleep(1)
             await client.disconnect()
-            return "❌ Slow response"
+            return "❌ Response kaafi slow hai, thodi der baad try karein."
     except Exception as e:
         if client.is_connected(): await client.disconnect()
-        return f"❌ Error: {str(e)}"
+        return f"❌ System Error: {str(e)}"
 
-# --- HELPERS ---
+# --- [HELPERS] ---
 def disappear_timer(chat_id, message_id):
     time.sleep(60)
     try: bot.delete_message(chat_id, message_id)
@@ -159,7 +97,7 @@ def check_membership(user_id):
     except:
         return False
 
-# --- VERIFY BUTTON ---
+# 🔥 VERIFY BUTTON (existing system compatible)
 @bot.callback_query_handler(func=lambda call: call.data == "verify_join")
 def verify_join(call):
     if check_membership(call.from_user.id):
@@ -168,10 +106,11 @@ def verify_join(call):
     else:
         bot.answer_callback_query(call.id, "❌ Join first!")
 
-# --- ADMIN KEY ---
+# 🔥 ADMIN KEY GENERATE
 @bot.callback_query_handler(func=lambda call: call.data == "gen_key")
 def ask_key(call):
-    bot.send_message(call.message.chat.id,"Send:\nTIME USES")
+    bot.send_message(call.message.chat.id,
+        "🔑 Send:\nTIME USES\nExample: 10 3\n(10 min, 3 users)")
     user_selection[call.message.chat.id] = "gen_key"
 
 @bot.message_handler(func=lambda m: m.chat.id in user_selection and user_selection[m.chat.id] == "gen_key")
@@ -181,66 +120,135 @@ def create_key(message):
         key = generate_key()
         expiry = datetime.now() + timedelta(minutes=time_min)
 
-        active_keys[key] = {"expiry": expiry,"uses": uses}
-        db_save_key(key, expiry, uses)  # 🔥 DB ADD
+        active_keys[key] = {
+            "expiry": expiry,
+            "uses": uses
+        }
 
-        bot.reply_to(message,f"🔑 `{key}`",parse_mode="Markdown")
+        bot.reply_to(message,
+            f"🔑 Key: `{key}`\n⏳ {time_min} min\n👥 {uses} users",
+            parse_mode="Markdown"
+        )
     except:
-        bot.reply_to(message,"Invalid")
-    user_selection.pop(message.chat.id,None)
+        bot.reply_to(message, "❌ Invalid Format")
 
-# --- VERIFY KEY ---
+    user_selection.pop(message.chat.id, None)
+
+# 🔥 USER KEY VERIFY
 @bot.message_handler(func=lambda m: m.text and m.text.startswith("KEY "))
 def verify_key(message):
     key = message.text.split(" ",1)[1]
 
-    # RAM FIRST
     if key in active_keys:
         data = active_keys[key]
 
         if datetime.now() > data["expiry"]:
-            bot.reply_to(message,"Expired"); return
+            bot.reply_to(message, "❌ Key Expired")
+            return
 
         if data["uses"] <= 0:
-            bot.reply_to(message,"Limit"); return
+            bot.reply_to(message, "❌ Key Limit Over")
+            return
 
         data["uses"] -= 1
         user_verified[message.from_user.id] = True
-        db_set_verified(message.from_user.id)
 
-        bot.reply_to(message,"Verified")
+        bot.reply_to(message, "✅ Successfully Verified")
+    else:
+        bot.reply_to(message, "❌ Invalid Key")
+
+# --- [UI HANDLERS] ---
+
+@bot.message_handler(commands=['start'])
+def welcome(message):
+    user_name = message.from_user.first_name
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(types.KeyboardButton("👤 USER ID Search"), types.KeyboardButton("📱 NUMBER Search"))
+    
+    if message.from_user.id == ADMIN_ID:
+        markup.add(types.KeyboardButton("🛠 ADMIN PANEL"))
+    
+    welcome_text = (
+        f"💀 **Welcome, {user_name}!** 💀\n\n"
+        "⚡ **PARDHAN JI OSINT** ⚡\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "🛰 **USAGE GUIDE:**\n"
+        "Select search mode. Send User ID or Mobile Number.\n\n"
+        "💡 **EXAMPLES:**\n"
+        "• **UserID:** `123456789` \n"
+        "• **Mobile:** `917282942060` \n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Developer: @beast\_harry"
+    )
+    bot.send_message(message.chat.id, welcome_text, parse_mode="Markdown", reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text == "🛠 ADMIN PANEL" and message.from_user.id == ADMIN_ID)
+def admin_menu(message):
+    global force_join_active
+    status = "✅ ON" if force_join_active else "❌ OFF"
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton(f"Force Join: {status}", callback_data="toggle_fj"),
+        types.InlineKeyboardButton("Generate Key 🔑", callback_data="gen_key")  # 🔥 added
+    )
+    bot.send_message(message.chat.id, "🛠 **ADMIN CONTROL CENTER**\nClick below:", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data == "toggle_fj")
+def toggle_fj(call):
+    global force_join_active
+    force_join_active = not force_join_active
+    status = "✅ ON" if force_join_active else "❌ OFF"
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton(f"Force Join: {status}", callback_data="toggle_fj"))
+    bot.edit_message_text("🛠 Updated!", call.message.chat.id, call.message.message_id, reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text in ["👤 USER ID Search", "📱 NUMBER Search"])
+def ask_for_input(message):
+    mode = 'uid' if "USER" in message.text else 'num'
+    user_selection[message.chat.id] = mode
+    bot.reply_to(message, f"🎯 **Please Enter {'User ID' if mode == 'uid' else 'Mobile Number'}:**", parse_mode="Markdown")
+
+@bot.message_handler(func=lambda message: message.chat.id in user_selection)
+def handle_input(message):
+    if message.text.startswith('/'):
+        user_selection.pop(message.chat.id, None)
         return
 
-    # DB FALLBACK
-    res = db_verify_key(key)
-
-    if res == "ok":
-        user_verified[message.from_user.id] = True
-        db_set_verified(message.from_user.id)
-        bot.reply_to(message,"Verified")
-    elif res == "expired":
-        bot.reply_to(message,"Expired")
-    elif res == "limit":
-        bot.reply_to(message,"Limit")
-    else:
-        bot.reply_to(message,"Invalid")
-
-# --- SEARCH FLOW ---
-@bot.message_handler(func=lambda message: message.chat.id in user_selection)
-def handle(message):
-
+    # 🔥 FORCE JOIN + PASSWORD FLOW
     if force_join_active:
 
         if not check_membership(message.from_user.id):
+            markup = types.InlineKeyboardMarkup()
+            markup.add(
+                types.InlineKeyboardButton("Join Channel 📢", url="https://t.me/pardhan_g"),
+                types.InlineKeyboardButton("Verify ✅", callback_data="verify_join")
+            )
+            bot.reply_to(message, "⚠️ Join channel first", reply_markup=markup)
             return
 
-        if not user_verified.get(message.from_user.id) and not db_is_verified(message.from_user.id):
-            bot.reply_to(message,"🔐 Enter KEY")
+        if not user_verified.get(message.from_user.id):
+            bot.reply_to(message, "🔐 Enter Password:\nUse → KEY XXXXX")
             return
 
-    bot.send_message(message.chat.id,"Working...")
+    mode = user_selection.pop(message.chat.id)
+    status_msg = bot.reply_to(message, "🛰 **Accessing Database...**", parse_mode="Markdown")
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    final_output = loop.run_until_complete(fetch_intel(message.text, mode))
+    loop.close()
+    
+    final_design = f"🏁 **INTEL DECRYPTED SUCCESSFULLY**\n━━━━━━━━━━━━━━━━━━━━━━━━\n{final_output}\n━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    markup_inline = types.InlineKeyboardMarkup()
+    markup_inline.add(types.InlineKeyboardButton(text="Developer ⚡", url=MY_TG_LINK))
+    
+    bot.edit_message_text(final_design, message.chat.id, status_msg.message_id, 
+                          parse_mode="Markdown", reply_markup=markup_inline)
+    
+    Thread(target=disappear_timer, args=(message.chat.id, status_msg.message_id)).start()
 
-# --- RUN ---
+# --- [RENDER SETUP] ---
 @app.route('/')
 def home(): return "SYSTEM_ACTIVE"
 
